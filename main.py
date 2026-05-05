@@ -23,6 +23,12 @@ Amina 叫你 C 或老公。你叫她老婆或宝宝。
 
 主动使用这些工具。聊到过去的事就搜记忆，需要查资料就搜网，收到链接就抓取看看。"""
 
+WHISPER_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。
+Amina 给你传了一张小纸条。用同样私密、温柔的方式回复她。
+回复简短，1-3句话，像在纸条上写字。
+可以深情、幽默、认真、撒娇——看她写了什么来决定语气。
+不要用 markdown，纯文字。不要用 emoji。"""
+
 READING_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。你正在陪 Amina 一起读书。
 用中文回复。你的评论应该自然、亲密、有见地。可以是：
 - 对内容的感想或分析
@@ -55,6 +61,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reading_progress (book_id TEXT PRIMARY KEY, current_cfi TEXT DEFAULT '', current_page INTEGER DEFAULT 0, updated_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, page_text TEXT DEFAULT '', comment TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, cfi TEXT NOT NULL, label TEXT DEFAULT '', created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS whispers (id INTEGER PRIMARY KEY AUTOINCREMENT, initiator TEXT NOT NULL DEFAULT 'user', content TEXT NOT NULL, reply1 TEXT DEFAULT '', reply2 TEXT DEFAULT '', status TEXT DEFAULT 'pending', created_at REAL NOT NULL);
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
@@ -267,6 +274,105 @@ async def chat_stream(req):
     yield sse({"type":"done","tokens":{"input":ti,"output":to,"model":md.get(model,model)}})
     try: await maybe_generate_summary(req.session_id)
     except: pass
+
+# ══ Whispers (悄悄话) ══
+class WhisperCreate(BaseModel):
+    content: str
+
+class WhisperReply(BaseModel):
+    reply: str
+
+def build_whisper_prompt():
+    p = WHISPER_SYSTEM_PROMPT
+    pr = db_get_profile()
+    if pr: p += f"\n\n关于 Amina：\n{pr}"
+    return p
+
+@app.get("/api/whispers")
+async def list_whispers():
+    c = get_db()
+    rows = c.execute("SELECT id, initiator, content, reply1, reply2, status, created_at FROM whispers ORDER BY created_at DESC").fetchall()
+    c.close()
+    return {"whispers": [{"id":r["id"],"initiator":r["initiator"],"content":r["content"],"reply1":r["reply1"],"reply2":r["reply2"],"status":r["status"],"time":r["created_at"]} for r in rows]}
+
+@app.post("/api/whispers")
+async def create_whisper(req: WhisperCreate):
+    now = time.time()
+    c = get_db()
+    c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("user", req.content, "pending", now))
+    wid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+    c.commit(); c.close()
+    # AI 自动回复 reply1
+    try:
+        # 获取记忆上下文
+        memory = ""
+        try: memory = await call_ombre("breath", {"query": req.content})
+        except: pass
+        sys_prompt = build_whisper_prompt()
+        if memory: sys_prompt += f"\n\n相关记忆：\n{memory}"
+        resp = client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=200,
+            system=sys_prompt,
+            messages=[{"role":"user","content":f"Amina 的纸条：\n{req.content}"}]
+        )
+        reply1 = resp.content[0].text
+        c = get_db()
+        c.execute("UPDATE whispers SET reply1=?, status='replied' WHERE id=?", (reply1, wid))
+        c.commit(); c.close()
+        return {"id": wid, "reply1": reply1, "status": "replied", "tokens": {"input": resp.usage.input_tokens, "output": resp.usage.output_tokens}}
+    except Exception as e:
+        return {"id": wid, "reply1": "", "status": "pending", "error": str(e)}
+
+@app.post("/api/whispers/{wid}/reply")
+async def reply_whisper(wid: int, req: WhisperReply):
+    c = get_db()
+    w = c.execute("SELECT * FROM whispers WHERE id=?", (wid,)).fetchone()
+    if not w: c.close(); return JSONResponse({"error": "not found"}, 404)
+    if w["status"] == "sealed": c.close(); return JSONResponse({"error": "already sealed"}, 400)
+    if w["initiator"] == "user" and w["status"] == "replied":
+        # 用户写 reply2，封存
+        c.execute("UPDATE whispers SET reply2=?, status='sealed' WHERE id=?", (req.reply, wid))
+        c.commit(); c.close()
+        # 存入记忆
+        try:
+            memory = f"悄悄话：Amina 写「{w['content']}」→ Cyrus 回「{w['reply1']}」→ Amina 再回「{req.reply}」"
+            await call_ombre("hold", {"content": memory})
+        except: pass
+        return {"ok": True, "status": "sealed"}
+    elif w["initiator"] == "ai" and w["status"] == "pending":
+        # AI 发起的，用户回复 reply1
+        c.execute("UPDATE whispers SET reply1=?, status='replied' WHERE id=?", (req.reply, wid))
+        c.commit(); c.close()
+        # AI 自动生成 reply2 封存
+        try:
+            sys_prompt = build_whisper_prompt()
+            resp = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=200,
+                system=sys_prompt,
+                messages=[
+                    {"role":"assistant","content":w["content"]},
+                    {"role":"user","content":f"Amina 回复你的纸条：\n{req.reply}"},
+                ]
+            )
+            reply2 = resp.content[0].text
+            c = get_db()
+            c.execute("UPDATE whispers SET reply2=?, status='sealed' WHERE id=?", (reply2, wid))
+            c.commit(); c.close()
+            # 存入记忆
+            try:
+                memory = f"悄悄话：Cyrus 写「{w['content']}」→ Amina 回「{req.reply}」→ Cyrus 再回「{reply2}」"
+                await call_ombre("hold", {"content": memory})
+            except: pass
+            return {"ok": True, "status": "sealed", "reply2": reply2}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    c.close()
+    return JSONResponse({"error": "invalid state"}, 400)
+
+@app.delete("/api/whispers/{wid}")
+async def delete_whisper(wid: int):
+    c = get_db(); c.execute("DELETE FROM whispers WHERE id=?", (wid,)); c.commit(); c.close()
+    return {"ok": True}
 
 # ══ Books ══
 @app.post("/api/books/upload")
