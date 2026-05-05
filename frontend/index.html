@@ -158,7 +158,7 @@ async function openReader(bookId,title){
 function closeReader(){stopAutoComment();if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';currentCfi='';$('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');closeDrawer();hideComment();$('highlightBar').classList.remove('show')}
 function prevPage(){if(rendition)rendition.prev()}
 function nextPage(){if(rendition)rendition.next()}
-function toggleSettings(){$('readerSettings').classList.toggle('show')}
+function toggleSettings(){var s=$('readerSettings');if(s.classList.contains('show')){s.classList.remove('show')}else{s.classList.add('show');setTimeout(()=>document.addEventListener('click',function h(e){if(!s.contains(e.target)){s.classList.remove('show');document.removeEventListener('click',h)}},0))}}
 function updateInterval(v){commentMinutes=parseInt(v);if(commentMinutes>0)startAutoComment();else stopAutoComment()}
 function updateFontSize(v){if(rendition)rendition.themes.fontSize(v+'%')}
 function startAutoComment(){stopAutoComment();if(commentMinutes<=0||!currentBook)return;commentTimer=setInterval(()=>{if(currentPageText)requestComment(currentPageText)},commentMinutes*60*1000)}
