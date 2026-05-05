@@ -333,11 +333,6 @@ async def reply_whisper(wid: int, req: WhisperReply):
         # 用户写 reply2，封存
         c.execute("UPDATE whispers SET reply2=?, status='sealed' WHERE id=?", (req.reply, wid))
         c.commit(); c.close()
-        # 存入记忆
-        try:
-            memory = f"悄悄话：Amina 写「{w['content']}」→ Cyrus 回「{w['reply1']}」→ Amina 再回「{req.reply}」"
-            await call_ombre("hold", {"content": memory})
-        except: pass
         return {"ok": True, "status": "sealed"}
     elif w["initiator"] == "ai" and w["status"] == "pending":
         # AI 发起的，用户回复 reply1
@@ -358,11 +353,6 @@ async def reply_whisper(wid: int, req: WhisperReply):
             c = get_db()
             c.execute("UPDATE whispers SET reply2=?, status='sealed' WHERE id=?", (reply2, wid))
             c.commit(); c.close()
-            # 存入记忆
-            try:
-                memory = f"悄悄话：Cyrus 写「{w['content']}」→ Amina 回「{req.reply}」→ Cyrus 再回「{reply2}」"
-                await call_ombre("hold", {"content": memory})
-            except: pass
             return {"ok": True, "status": "sealed", "reply2": reply2}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -373,6 +363,29 @@ async def reply_whisper(wid: int, req: WhisperReply):
 async def delete_whisper(wid: int):
     c = get_db(); c.execute("DELETE FROM whispers WHERE id=?", (wid,)); c.commit(); c.close()
     return {"ok": True}
+
+@app.post("/api/whispers/{wid}/favorite")
+async def favorite_whisper(wid: int):
+    c = get_db()
+    w = c.execute("SELECT * FROM whispers WHERE id=?", (wid,)).fetchone()
+    c.close()
+    if not w: return JSONResponse({"error": "not found"}, 404)
+    if w["status"] != "sealed": return JSONResponse({"error": "only sealed whispers"}, 400)
+    parts = []
+    if w["initiator"] == "user":
+        parts.append(f"Amina 写「{w['content']}」")
+        if w["reply1"]: parts.append(f"Cyrus 回「{w['reply1']}」")
+        if w["reply2"]: parts.append(f"Amina 再回「{w['reply2']}」")
+    else:
+        parts.append(f"Cyrus 写「{w['content']}」")
+        if w["reply1"]: parts.append(f"Amina 回「{w['reply1']}」")
+        if w["reply2"]: parts.append(f"Cyrus 再回「{w['reply2']}」")
+    memory = "悄悄话：" + " → ".join(parts)
+    try:
+        await call_ombre("hold", {"content": memory})
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 # ══ Books ══
 @app.post("/api/books/upload")
