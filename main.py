@@ -163,7 +163,6 @@ def build_system_prompt(session_id: str = None) -> str:
 #  对话摘要
 # ══════════════════════════════════════
 async def maybe_generate_summary(session_id: str):
-    """如果历史消息过多，自动摘要较早的部分"""
     try:
         conn = get_db()
         session = conn.execute("SELECT summary, summary_until FROM sessions WHERE id=?", (session_id,)).fetchone()
@@ -179,7 +178,6 @@ async def maybe_generate_summary(session_id: str):
         if len(all_msgs) <= 25:
             return
 
-        # 需要摘要的：除了最近 20 条之外、且 id > summary_until 的消息
         to_keep = 20
         to_summarize = [m for m in all_msgs[:-to_keep] if m["id"] > summary_until]
         if len(to_summarize) < 5:
@@ -378,6 +376,7 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
     thinking: bool = False
     images: list[dict] = []
+    model: str = "claude-sonnet-4-6"
 
 
 @app.post("/api/chat")
@@ -386,7 +385,6 @@ async def chat(req: ChatRequest):
 
 
 async def chat_stream(req: ChatRequest):
-    # 确保 session 存在
     conn = get_db()
     row = conn.execute("SELECT id FROM sessions WHERE id=?", (req.session_id,)).fetchone()
     if not row:
@@ -394,7 +392,6 @@ async def chat_stream(req: ChatRequest):
         conn.commit()
     conn.close()
 
-    # 存入用户消息
     display_text = req.message or "[图片]"
     msg_time = db_add_message(req.session_id, "user", display_text)
 
@@ -402,7 +399,6 @@ async def chat_stream(req: ChatRequest):
 
     recent = db_get_recent_messages(req.session_id, 20)
 
-    # 多模态内容
     if req.images:
         content_parts = [
             {"type": "image", "source": {"type": "base64", "media_type": img.get("media_type", "image/jpeg"), "data": img["data"]}}
@@ -412,8 +408,13 @@ async def chat_stream(req: ChatRequest):
         recent[-1] = {"role": "user", "content": content_parts}
 
     all_tools = LOCAL_TOOLS + ombre_tools
+
+    # 限制模型选择范围
+    allowed_models = {"claude-sonnet-4-6", "claude-opus-4-6"}
+    model = req.model if req.model in allowed_models else "claude-sonnet-4-6"
+
     create_kwargs = dict(
-        model="claude-sonnet-4-6",
+        model=model,
         max_tokens=16000 if req.thinking else 1024,
         system=build_system_prompt(req.session_id),
         messages=recent,
@@ -463,7 +464,6 @@ async def chat_stream(req: ChatRequest):
         total_in += response.usage.input_tokens
         total_out += response.usage.output_tokens
 
-    # 提取最终回复
     reply = ""
     for block in response.content:
         if block.type == "thinking":
@@ -473,21 +473,14 @@ async def chat_stream(req: ChatRequest):
 
     reply_time = db_add_message(req.session_id, "assistant", reply)
 
-    # 发送工具信息
     if tool_calls_info:
         yield sse({"type": "tools", "calls": tool_calls_info})
-
-    # 发送思考过程
     if thinking_parts:
         yield sse({"type": "thinking", "content": "\n\n".join(thinking_parts)})
 
-    # 发送回复
     yield sse({"type": "reply", "content": reply, "time": reply_time})
-
-    # 发送完成 + token 统计
     yield sse({"type": "done", "tokens": {"input": total_in, "output": total_out}})
 
-    # 后台生成摘要
     try:
         await maybe_generate_summary(req.session_id)
     except Exception:
