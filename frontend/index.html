@@ -437,7 +437,7 @@ async function openReader(bookId,title){
     $('readerWrap').innerHTML='';
     epubBook=ePub(`/api/books/${bookId}/file`);
     const wrapH=$('readerWrap').clientHeight||window.innerHeight-100;rendition=epubBook.renderTo('readerWrap',{width:'100%',height:wrapH+'px',flow:'paginated',spread:'none'});
-    rendition.themes.default({body:{background:'#1a1612 !important',color:'#e5ddd0 !important','font-family':"'Noto Serif SC', serif !important",'line-height':'1.8 !important','padding':'0 8px !important'},'p':{color:'#e5ddd0 !important'},'a':{color:'#e8c87a !important'},'h1,h2,h3,h4':{color:'#e8c87a !important'}});
+    rendition.hooks.content.register(function(contents){var s=contents.document.createElement('style');s.textContent='body{background:#1a1612!important;color:#e5ddd0!important;font-family:Noto Serif SC,serif!important;line-height:1.8!important;padding:0 12px!important}*{color:inherit!important}a{color:#e8c87a!important}h1,h2,h3,h4,h5,h6{color:#e8c87a!important}img{max-width:100%!important}';contents.document.head.appendChild(s)});
     // Load saved progress
     try{const r=await fetch(`/api/reading/progress/${bookId}`);const d=await r.json();if(d.cfi)rendition.display(d.cfi);else rendition.display()}catch(e){rendition.display()}
     rendition.on('relocated',loc=>{
