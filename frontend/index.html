@@ -155,7 +155,7 @@ async function openReader(bookId,title){
         await loadBookmarks();loadToc();startAutoComment();try{await fetch('/api/reading/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId})})}catch(e){}
     }catch(e){$('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:#d4956a">加载失败: '+escapeHtml(e.message)+'</div>'}
 }
-function closeReader(){stopAutoComment();if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';currentCfi='';$('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');closeDrawer();hideComment();$('highlightBar').classList.remove('show')}
+function closeReader(){stopAutoComment();if(currentBook)fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook})}).catch(()=>{});if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';currentCfi='';$('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');closeDrawer();hideComment();$('highlightBar').classList.remove('show')}
 function prevPage(){if(rendition)rendition.prev()}
 function nextPage(){if(rendition)rendition.next()}
 function toggleSettings(){var s=$('readerSettings');if(s.classList.contains('show')){s.classList.remove('show')}else{s.classList.add('show');setTimeout(()=>document.addEventListener('click',function h(e){if(!s.contains(e.target)){s.classList.remove('show');document.removeEventListener('click',h)}},0))}}
