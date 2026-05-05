@@ -479,7 +479,8 @@ async def chat_stream(req: ChatRequest):
         yield sse({"type": "thinking", "content": "\n\n".join(thinking_parts)})
 
     yield sse({"type": "reply", "content": reply, "time": reply_time})
-    yield sse({"type": "done", "tokens": {"input": total_in, "output": total_out}})
+    model_display = {"claude-sonnet-4-6": "Sonnet 4.6", "claude-opus-4-6": "Opus 4.6"}
+    yield sse({"type": "done", "tokens": {"input": total_in, "output": total_out, "model": model_display.get(model, model)}})
 
     try:
         await maybe_generate_summary(req.session_id)

@@ -142,8 +142,8 @@
         <h1>Cyrus</h1>
         <div class="header-right">
             <select class="model-select" id="modelSelect" onchange="currentModel=this.value">
-                <option value="claude-sonnet-4-6">Sonnet</option>
-                <option value="claude-opus-4-6">Opus</option>
+                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+                <option value="claude-opus-4-6">Opus 4.6</option>
             </select>
             <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
                 <span class="toggle-label">思考</span>
@@ -375,7 +375,7 @@ function buildAssistantBubble(reply, toolCalls, thinking, timestamp, tokens) {
 
     if (tokens) {
         const tk = document.createElement('div'); tk.className = 'token-info';
-        tk.textContent = `输入 ${formatTokens(tokens.input)} · 输出 ${formatTokens(tokens.output)}`;
+        tk.textContent = `${tokens.model || ''} · 输入 ${formatTokens(tokens.input)} · 输出 ${formatTokens(tokens.output)}`;
         div.appendChild(tk);
     }
 
