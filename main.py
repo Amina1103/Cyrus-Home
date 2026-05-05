@@ -7,6 +7,8 @@ import os
 import httpx
 import asyncio
 import base64
+import uuid
+import time
 
 # ── 配置 ──
 OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
@@ -31,10 +33,7 @@ LOCAL_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "搜索关键词",
-                }
+                "query": {"type": "string", "description": "搜索关键词"}
             },
             "required": ["query"],
         },
@@ -45,10 +44,7 @@ LOCAL_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "要抓取的网页 URL",
-                }
+                "url": {"type": "string", "description": "要抓取的网页 URL"}
             },
             "required": ["url"],
         },
@@ -59,19 +55,9 @@ LOCAL_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "owner": {
-                    "type": "string",
-                    "description": "仓库所有者，如 Amina1103",
-                },
-                "repo": {
-                    "type": "string",
-                    "description": "仓库名称，如 Cyrus-Home",
-                },
-                "path": {
-                    "type": "string",
-                    "description": "文件或目录路径，如 main.py。留空读取根目录",
-                    "default": "",
-                },
+                "owner": {"type": "string", "description": "仓库所有者"},
+                "repo": {"type": "string", "description": "仓库名称"},
+                "path": {"type": "string", "description": "文件路径，留空读根目录", "default": ""},
             },
             "required": ["owner", "repo"],
         },
@@ -80,10 +66,13 @@ LOCAL_TOOLS = [
 
 # ── 全局状态 ──
 ombre_tools: list[dict] = []
-conversation_history: list[dict] = []
+# 会话存储: session_id -> {"messages": [...], "last_active": timestamp}
+sessions: dict[str, dict] = {}
 
 
-# ── Ombre Brain MCP 连接 ──
+# ══════════════════════════════════════
+#  Ombre Brain MCP
+# ══════════════════════════════════════
 async def fetch_ombre_tools() -> list[dict]:
     from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
@@ -93,12 +82,8 @@ async def fetch_ombre_tools() -> list[dict]:
             await session.initialize()
             result = await session.list_tools()
             return [
-                {
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "input_schema": tool.inputSchema,
-                }
-                for tool in result.tools
+                {"name": t.name, "description": t.description or "", "input_schema": t.inputSchema}
+                for t in result.tools
             ]
 
 
@@ -114,7 +99,9 @@ async def call_ombre(name: str, arguments: dict) -> str:
             return "\n".join(texts) if texts else "没有找到相关内容"
 
 
-# ── 本地工具实现 ──
+# ══════════════════════════════════════
+#  本地工具实现
+# ══════════════════════════════════════
 async def do_web_search(query: str) -> str:
     from duckduckgo_search import DDGS
 
@@ -180,7 +167,6 @@ async def do_github_read(owner: str, repo: str, path: str = "") -> str:
         return f"GitHub 读取失败: {e}"
 
 
-# ── 工具分发 ──
 async def execute_tool(name: str, arguments: dict) -> str:
     if name == "web_search":
         return await do_web_search(arguments.get("query", ""))
@@ -188,15 +174,15 @@ async def execute_tool(name: str, arguments: dict) -> str:
         return await do_web_fetch(arguments.get("url", ""))
     elif name == "github_read":
         return await do_github_read(
-            arguments.get("owner", ""),
-            arguments.get("repo", ""),
-            arguments.get("path", ""),
+            arguments.get("owner", ""), arguments.get("repo", ""), arguments.get("path", "")
         )
     else:
         return await call_ombre(name, arguments)
 
 
-# ── 应用启动 ──
+# ══════════════════════════════════════
+#  应用启动
+# ══════════════════════════════════════
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global ombre_tools
@@ -216,68 +202,145 @@ def serialize_blocks(blocks) -> list[dict]:
     result = []
     for b in blocks:
         if b.type == "tool_use":
-            result.append(
-                {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-            )
+            result.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
         elif b.type == "text":
             result.append({"type": "text", "text": b.text})
+        elif b.type == "thinking":
+            d = {"type": "thinking", "thinking": b.thinking}
+            if hasattr(b, "signature") and b.signature:
+                d["signature"] = b.signature
+            result.append(d)
     return result
 
 
-# ── API 路由 ──
+# ══════════════════════════════════════
+#  会话管理 API
+# ══════════════════════════════════════
+@app.get("/api/sessions")
+async def list_sessions():
+    result = []
+    for sid, data in sorted(sessions.items(), key=lambda x: x[1]["last_active"], reverse=True):
+        preview = "新对话"
+        for msg in data["messages"]:
+            if msg["role"] == "user" and isinstance(msg["content"], str):
+                preview = msg["content"][:30]
+                break
+        result.append({"id": sid, "preview": preview})
+    return {"sessions": result}
+
+
+@app.post("/api/sessions")
+async def create_session():
+    sid = uuid.uuid4().hex[:8]
+    sessions[sid] = {"messages": [], "last_active": time.time()}
+    return {"session_id": sid}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str):
+    sessions.pop(session_id, None)
+    return {"ok": True}
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(session_id: str):
+    data = sessions.get(session_id, {"messages": []})
+    return {"messages": data["messages"]}
+
+
+# ══════════════════════════════════════
+#  聊天 API
+# ══════════════════════════════════════
 class ChatRequest(BaseModel):
     message: str
+    session_id: str = "default"
+    thinking: bool = False
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    conversation_history.append({"role": "user", "content": req.message})
-    recent = conversation_history[-20:]
+    # 获取或创建会话
+    if req.session_id not in sessions:
+        sessions[req.session_id] = {"messages": [], "last_active": time.time()}
+    session = sessions[req.session_id]
+    session["last_active"] = time.time()
+    history = session["messages"]
+
+    history.append({"role": "user", "content": req.message})
+    recent = [msg.copy() for msg in history[-20:]]
 
     all_tools = LOCAL_TOOLS + ombre_tools
 
     create_kwargs = dict(
         model="claude-sonnet-4-6",
-        max_tokens=1024,
+        max_tokens=16000 if req.thinking else 1024,
         system=SYSTEM_PROMPT,
         messages=recent,
     )
     if all_tools:
         create_kwargs["tools"] = all_tools
+    if req.thinking:
+        create_kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
 
     response = client.messages.create(**create_kwargs)
 
+    thinking_parts = []
+    tool_calls_info = []
+
     # 工具调用循环
     while response.stop_reason == "tool_use":
-        recent.append(
-            {"role": "assistant", "content": serialize_blocks(response.content)}
-        )
+        serialized = serialize_blocks(response.content)
+        recent.append({"role": "assistant", "content": serialized})
+
+        for block in response.content:
+            if block.type == "thinking":
+                thinking_parts.append(block.thinking)
 
         tool_results = []
         for block in response.content:
             if block.type == "tool_use":
                 try:
-                    text = await execute_tool(block.name, block.input)
+                    result_text = await execute_tool(block.name, block.input)
                 except Exception as e:
-                    text = f"工具调用失败: {e}"
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": text,
-                    }
-                )
+                    result_text = f"工具调用失败: {e}"
+                tool_calls_info.append({
+                    "name": block.name,
+                    "input": block.input,
+                    "result_preview": result_text[:200],
+                })
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_text,
+                })
 
         recent.append({"role": "user", "content": tool_results})
         create_kwargs["messages"] = recent
         response = client.messages.create(**create_kwargs)
 
-    reply = "".join(b.text for b in response.content if hasattr(b, "text"))
-    conversation_history.append({"role": "assistant", "content": reply})
+    # 提取最终回复
+    reply = ""
+    for block in response.content:
+        if block.type == "thinking":
+            thinking_parts.append(block.thinking)
+        elif hasattr(block, "text"):
+            reply += block.text
 
-    return {"reply": reply}
+    # 只存文字到持久历史
+    history.append({"role": "assistant", "content": reply})
+
+    result = {"reply": reply}
+    if thinking_parts:
+        result["thinking"] = "\n\n".join(thinking_parts)
+    if tool_calls_info:
+        result["tool_calls"] = tool_calls_info
+
+    return result
 
 
+# ══════════════════════════════════════
+#  静态文件
+# ══════════════════════════════════════
 @app.get("/")
 async def root():
     return FileResponse("frontend/index.html")
