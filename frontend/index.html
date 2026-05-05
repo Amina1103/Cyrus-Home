@@ -252,7 +252,7 @@ async function openReader(bookId,title){
             var lnk=contents.document.createElement('link');lnk.rel='stylesheet';lnk.href='https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600&display=swap';contents.document.head.appendChild(lnk);
             var b=contents.document.body;
             b.style.cssText='background:#1a1612!important;color:#e5ddd0!important;font-family:-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif!important;line-height:2.0!important;padding:12px 20px!important;font-size:16px!important;letter-spacing:0.5px!important';
-            var all=b.querySelectorAll('*');for(var i=0;i<all.length;i++){all[i].style.color='#e5ddd0';all[i].style.backgroundColor='transparent'}
+            var all=b.querySelectorAll('*');for(var i=0;i<all.length;i++){all[i].style.color='#e5ddd0';all[i].style.backgroundColor='transparent';all[i].style.fontFamily='-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif';all[i].style.lineHeight='2.0'}
             var links=b.querySelectorAll('a');for(var j=0;j<links.length;j++)links[j].style.color='#e8c87a';
             var heads=b.querySelectorAll('h1,h2,h3,h4,h5,h6');for(var k=0;k<heads.length;k++)heads[k].style.color='#e8c87a';
         });
