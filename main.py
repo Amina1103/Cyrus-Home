@@ -407,7 +407,7 @@ async def ai_initiate_whisper():
     if toggle and toggle["value"] == "false": c.close(); return {"initiated": False, "reason": "disabled"}
     # 检查未回复的 AI 纸条
     pending = c.execute("SELECT id, created_at FROM whispers WHERE initiator='ai' AND status='pending' ORDER BY created_at DESC LIMIT 1").fetchone()
-    if pending and time.time() - pending["created_at"] < 86400:
+    if pending and time.time() - pending["created_at"] < 57600:
         c.close(); return {"initiated": False, "reason": "has_pending"}
     # 距上一张纸条至少 2 小时
     last = c.execute("SELECT created_at FROM whispers ORDER BY created_at DESC LIMIT 1").fetchone()
