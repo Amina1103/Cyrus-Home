@@ -61,7 +61,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reading_progress (book_id TEXT PRIMARY KEY, current_cfi TEXT DEFAULT '', current_page INTEGER DEFAULT 0, updated_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, page_text TEXT DEFAULT '', comment TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, cfi TEXT NOT NULL, label TEXT DEFAULT '', created_at REAL NOT NULL);
-        CREATE TABLE IF NOT EXISTS whispers (id INTEGER PRIMARY KEY AUTOINCREMENT, initiator TEXT NOT NULL DEFAULT 'user', content TEXT NOT NULL, reply1 TEXT DEFAULT '', reply2 TEXT DEFAULT '', status TEXT DEFAULT 'pending', created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS whispers (id INTEGER PRIMARY KEY AUTOINCREMENT, initiator TEXT NOT NULL DEFAULT 'user', content TEXT NOT NULL, reply1 TEXT DEFAULT '', reply2 TEXT DEFAULT '', status TEXT DEFAULT 'pending', favorited INTEGER DEFAULT 0, created_at REAL NOT NULL);
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
@@ -291,9 +291,9 @@ def build_whisper_prompt():
 @app.get("/api/whispers")
 async def list_whispers():
     c = get_db()
-    rows = c.execute("SELECT id, initiator, content, reply1, reply2, status, created_at FROM whispers ORDER BY created_at DESC").fetchall()
+    rows = c.execute("SELECT id, initiator, content, reply1, reply2, status, favorited, created_at FROM whispers ORDER BY created_at DESC").fetchall()
     c.close()
-    return {"whispers": [{"id":r["id"],"initiator":r["initiator"],"content":r["content"],"reply1":r["reply1"],"reply2":r["reply2"],"status":r["status"],"time":r["created_at"]} for r in rows]}
+    return {"whispers": [{"id":r["id"],"initiator":r["initiator"],"content":r["content"],"reply1":r["reply1"],"reply2":r["reply2"],"status":r["status"],"favorited":bool(r["favorited"]),"time":r["created_at"]} for r in rows]}
 
 @app.post("/api/whispers")
 async def create_whisper(req: WhisperCreate):
@@ -302,9 +302,7 @@ async def create_whisper(req: WhisperCreate):
     c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("user", req.content, "pending", now))
     wid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
     c.commit(); c.close()
-    # AI 自动回复 reply1
     try:
-        # 获取记忆上下文
         memory = ""
         try: memory = await call_ombre("breath", {"query": req.content})
         except: pass
@@ -330,15 +328,12 @@ async def reply_whisper(wid: int, req: WhisperReply):
     if not w: c.close(); return JSONResponse({"error": "not found"}, 404)
     if w["status"] == "sealed": c.close(); return JSONResponse({"error": "already sealed"}, 400)
     if w["initiator"] == "user" and w["status"] == "replied":
-        # 用户写 reply2，封存
         c.execute("UPDATE whispers SET reply2=?, status='sealed' WHERE id=?", (req.reply, wid))
         c.commit(); c.close()
         return {"ok": True, "status": "sealed"}
     elif w["initiator"] == "ai" and w["status"] == "pending":
-        # AI 发起的，用户回复 reply1
         c.execute("UPDATE whispers SET reply1=?, status='replied' WHERE id=?", (req.reply, wid))
         c.commit(); c.close()
-        # AI 自动生成 reply2 封存
         try:
             sys_prompt = build_whisper_prompt()
             resp = client.messages.create(
@@ -371,6 +366,7 @@ async def favorite_whisper(wid: int):
     c.close()
     if not w: return JSONResponse({"error": "not found"}, 404)
     if w["status"] != "sealed": return JSONResponse({"error": "only sealed whispers"}, 400)
+    if w["favorited"]: return {"ok": True, "already": True}
     parts = []
     if w["initiator"] == "user":
         parts.append(f"Amina 写「{w['content']}」")
@@ -383,6 +379,7 @@ async def favorite_whisper(wid: int):
     memory = "悄悄话：" + " → ".join(parts)
     try:
         await call_ombre("hold", {"content": memory})
+        c = get_db(); c.execute("UPDATE whispers SET favorited=1 WHERE id=?", (wid,)); c.commit(); c.close()
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -401,20 +398,16 @@ async def set_whisper_toggle(req: dict):
 @app.post("/api/whispers/ai-initiate")
 async def ai_initiate_whisper():
     import random
-    # 检查开关
     c = get_db()
     toggle = c.execute("SELECT value FROM settings WHERE key='whisper_ai_enabled'").fetchone()
     if toggle and toggle["value"] == "false": c.close(); return {"initiated": False, "reason": "disabled"}
-    # 检查未回复的 AI 纸条
     pending = c.execute("SELECT id, created_at FROM whispers WHERE initiator='ai' AND status='pending' ORDER BY created_at DESC LIMIT 1").fetchone()
     if pending and time.time() - pending["created_at"] < 57600:
         c.close(); return {"initiated": False, "reason": "has_pending"}
-    # 距上一张纸条至少 2 小时
     last = c.execute("SELECT created_at FROM whispers ORDER BY created_at DESC LIMIT 1").fetchone()
     c.close()
     if last and time.time() - last["created_at"] < 7200: return {"initiated": False, "reason": "too_soon"}
     if random.random() > 0.3: return {"initiated": False, "reason": "not_this_time"}
-    # 构建上下文：检查等待状态
     waiting_context = ""
     if pending:
         hours = int((time.time() - pending["created_at"]) / 3600)
