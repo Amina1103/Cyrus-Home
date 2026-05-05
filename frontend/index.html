@@ -16,7 +16,6 @@
         html,body{height:100%;background:var(--bg-deep);color:var(--cream);font-family:'Noto Serif SC',serif;overflow:hidden}
         #app{display:flex;flex-direction:column;height:100%;height:100dvh}
 
-        /* 侧边栏 */
         .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;opacity:0;pointer-events:none;transition:opacity .3s}
         .sidebar-overlay.show{opacity:1;pointer-events:auto}
         .sidebar{position:fixed;top:0;left:0;bottom:0;width:300px;background:var(--bg-deep);border-right:1px solid rgba(232,200,122,.1);z-index:11;transform:translateX(-100%);transition:transform .3s;display:flex;flex-direction:column;padding-top:max(12px,env(safe-area-inset-top))}
@@ -33,7 +32,6 @@
         .session-item .icon-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--cream-dim);font-size:13px;cursor:pointer;border:none;background:none;border-radius:6px;flex-shrink:0}
         .session-item .icon-btn:active{background:rgba(212,149,106,.2)}
 
-        /* Profile */
         .profile-section{border-top:1px solid rgba(232,200,122,.1);padding:14px 16px;flex-shrink:0}
         .profile-section .label{font-size:12px;color:var(--gold-muted);margin-bottom:8px;letter-spacing:1px}
         .profile-section textarea{width:100%;height:80px;background:var(--bg-input);border:1px solid rgba(232,200,122,.12);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;outline:none;line-height:1.5}
@@ -44,10 +42,14 @@
         .profile-saved{font-size:11px;color:var(--gold-muted);margin-left:8px;opacity:0;transition:opacity .3s}
         .profile-saved.show{opacity:1}
 
-        /* 顶栏 */
         .header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;position:relative}
         .menu-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--gold);font-size:22px;cursor:pointer}
         .header h1{font-size:18px;font-weight:600;color:var(--gold);letter-spacing:2px;position:absolute;left:50%;transform:translateX(-50%)}
+        .header-right{display:flex;align-items:center;gap:6px}
+
+        .model-select{background:var(--bg-input);color:var(--cream);border:1px solid var(--cream-dim);border-radius:8px;padding:4px 8px;font-size:11px;font-family:'Noto Serif SC',serif;outline:none;-webkit-appearance:none;appearance:none}
+        .model-select option{background:var(--bg-deep);color:var(--cream)}
+
         .toggle-wrap{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
         .toggle-label{font-size:12px;color:var(--cream-dim);transition:color .2s}
         .toggle-wrap.on .toggle-label{color:var(--gold)}
@@ -56,7 +58,6 @@
         .toggle-thumb{width:16px;height:16px;border-radius:50%;background:var(--cream-dim);position:absolute;top:1px;left:1px;transition:transform .2s,background .2s}
         .toggle-wrap.on .toggle-thumb{transform:translateX(14px);background:var(--gold)}
 
-        /* 消息区 */
         .messages{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
         .messages::-webkit-scrollbar{display:none}
         .msg{max-width:80%;padding:12px 16px;border-radius:18px;font-size:15px;line-height:1.7;animation:fadeUp .25s ease-out;word-break:break-word}
@@ -68,7 +69,6 @@
         .msg-time{font-size:10px;color:var(--cream-dim);margin-top:4px;opacity:.6}
         .token-info{font-size:10px;color:var(--cream-dim);margin-top:4px;opacity:.5}
 
-        /* Markdown 样式 */
         .md-content p{margin-bottom:8px}
         .md-content p:last-child{margin-bottom:0}
         .md-content strong{color:var(--gold)}
@@ -82,28 +82,24 @@
         .md-content a{color:var(--gold);text-decoration:underline}
         .md-content hr{border:none;border-top:1px solid rgba(232,200,122,.1);margin:10px 0}
 
-        /* 工具标签 */
         .tool-info{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(232,200,122,.08)}
         .tool-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;background:rgba(232,200,122,.08);border:1px solid rgba(232,200,122,.12);font-size:11px;color:var(--gold-muted);cursor:pointer}
         .tool-tag:active{background:rgba(232,200,122,.15)}
         .tool-detail{margin-top:4px;padding:6px 8px;background:rgba(0,0,0,.2);border-radius:6px;font-size:11px;color:var(--cream-dim);line-height:1.5;white-space:pre-wrap;word-break:break-all;display:none}
         .tool-detail.show{display:block}
 
-        /* 思考过程 */
         .thinking-section{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(232,200,122,.08)}
         .thinking-toggle-btn{font-size:12px;color:var(--warm);cursor:pointer;user-select:none}
         .thinking-content{display:none;margin-top:6px;padding:8px;background:rgba(0,0,0,.15);border-radius:8px;font-size:12px;color:var(--cream-dim);line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
         .thinking-content.show{display:block}
         .thinking-content::-webkit-scrollbar{display:none}
 
-        /* 状态提示 */
         .status-bar{align-self:flex-start;padding:8px 20px;display:none;align-items:center;gap:8px}
         .status-bar.show{display:flex}
         .status-dot{width:6px;height:6px;border-radius:50%;background:var(--gold-muted);animation:pulse 1.2s infinite}
         .status-text{font-size:13px;color:var(--cream-dim)}
         @keyframes pulse{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}
 
-        /* 附件预览 */
         .attach-preview{display:none;padding:8px 16px;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid rgba(232,200,122,.06);flex-shrink:0}
         .attach-preview.show{display:flex}
         .attach-thumb{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid rgba(232,200,122,.15)}
@@ -112,7 +108,6 @@
         .attach-file-tag{padding:6px 12px;background:var(--bg-card);border-radius:8px;font-size:12px;color:var(--cream-dim);display:flex;align-items:center;gap:6px}
         .attach-file-tag .remove{background:none;border:none;color:var(--cream-dim);cursor:pointer;font-size:14px}
 
-        /* 输入栏 */
         .input-bar{padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid rgba(232,200,122,.08);background:var(--bg-deep);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
         .attach-btn{width:42px;height:42px;border-radius:50%;border:none;background:var(--bg-card);color:var(--gold-muted);font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
         .attach-btn:active{background:var(--bg-input)}
@@ -145,9 +140,15 @@
     <div class="header">
         <button class="menu-btn" onclick="openSidebar()">≡</button>
         <h1>Cyrus</h1>
-        <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
-            <span class="toggle-label">思考</span>
-            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+        <div class="header-right">
+            <select class="model-select" id="modelSelect" onchange="currentModel=this.value">
+                <option value="claude-sonnet-4-6">Sonnet</option>
+                <option value="claude-opus-4-6">Opus</option>
+            </select>
+            <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
+                <span class="toggle-label">思考</span>
+                <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            </div>
         </div>
     </div>
 
@@ -163,17 +164,15 @@
 </div>
 
 <script>
-// ── 配置 marked ──
 marked.setOptions({breaks: true, gfm: true});
 
-// ── 状态 ──
 let currentSessionId = null, thinkingEnabled = false;
+let currentModel = 'claude-sonnet-4-6';
 let pendingImages = [], pendingFiles = [];
 const $ = id => document.getElementById(id);
 const messagesEl = $('messages'), inputEl = $('input'), sendBtn = $('send');
 const statusBar = $('statusBar'), statusText = $('statusText'), attachPreviewEl = $('attachPreview');
 
-// ── 工具函数 ──
 function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 function renderMarkdown(text) { return marked.parse(text); }
 function formatTime(ts) {
@@ -183,11 +182,9 @@ function formatTime(ts) {
 }
 function formatTokens(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : n.toString(); }
 
-// ── 侧边栏 ──
 function openSidebar() { $('sidebar').classList.add('show'); $('sidebarOverlay').classList.add('show'); }
 function closeSidebar() { $('sidebar').classList.remove('show'); $('sidebarOverlay').classList.remove('show'); }
 
-// ── Profile ──
 async function loadProfile() {
     try { const r = await fetch('/api/profile'); const d = await r.json(); $('profileInput').value = d.profile || ''; } catch(e) {}
 }
@@ -198,7 +195,6 @@ async function saveProfile() {
     } catch(e) {}
 }
 
-// ── 会话管理 ──
 let sessionsList = [];
 async function refreshSessions() {
     try { const r = await fetch('/api/sessions'); sessionsList = (await r.json()).sessions; renderSessionList(); } catch(e) {}
@@ -251,16 +247,17 @@ async function deleteSession(sid) {
     } catch(e) {}
 }
 function exportSession(sid) {
-    window.open(`/api/sessions/${sid}/export`, '_blank');
+    const a = document.createElement('a');
+    a.href = `/api/sessions/${sid}/export`;
+    a.download = `cyrus-chat-${sid}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// ── Thinking 开关 ──
 function toggleThinking() {
     thinkingEnabled = !thinkingEnabled;
     $('thinkingToggle').classList.toggle('on', thinkingEnabled);
 }
 
-// ── 附件处理 ──
 async function handleFiles(fileList) {
     for (const file of fileList) {
         if (file.type.startsWith('image/')) {
@@ -312,7 +309,6 @@ function renderAttachPreview() {
 function removeImage(i) { pendingImages.splice(i,1); renderAttachPreview(); }
 function removeFile(i) { pendingFiles.splice(i,1); renderAttachPreview(); }
 
-// ── 消息显示 ──
 function clearMessages() { messagesEl.innerHTML = '<div class="welcome" id="welcome">说点什么吧</div>'; }
 
 function addMessage(role, text, imgPreviews, timestamp) {
@@ -387,14 +383,11 @@ function buildAssistantBubble(reply, toolCalls, thinking, timestamp, tokens) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-// ── 状态显示 ──
 function showStatus(text) { statusText.textContent = text; statusBar.classList.add('show'); messagesEl.scrollTop = messagesEl.scrollHeight; }
 function hideStatus() { statusBar.classList.remove('show'); }
 
-// ── 输入处理（Enter 换行，按钮发送）──
 inputEl.addEventListener('input', () => { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; });
 
-// ── 发送消息（SSE 流式）──
 async function sendMessage() {
     const text = inputEl.value.trim();
     const hasAttach = pendingImages.length > 0 || pendingFiles.length > 0;
@@ -414,7 +407,7 @@ async function sendMessage() {
 
     const body = {
         message: messageText, session_id: currentSessionId,
-        thinking: thinkingEnabled,
+        thinking: thinkingEnabled, model: currentModel,
         images: pendingImages.map(i => ({data: i.data, media_type: i.media_type})),
     };
     pendingImages = []; pendingFiles = []; renderAttachPreview();
@@ -463,7 +456,6 @@ async function sendMessage() {
     sendBtn.disabled = false; inputEl.focus();
 }
 
-// ── 初始化 ──
 async function init() {
     loadProfile();
     try {
