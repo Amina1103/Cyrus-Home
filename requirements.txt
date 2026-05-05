@@ -5,4 +5,4 @@ mcp
 httpx
 duckduckgo-search
 beautifulsoup4
- 
+python-multipart
