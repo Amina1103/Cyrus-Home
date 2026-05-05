@@ -139,7 +139,7 @@ async function openReader(bookId,title){
         rendition.themes.override('color','#e5ddd0');
         rendition.themes.override('background','#1a1612');
         rendition.themes.override('line-height','2.0');
-        rendition.themes.override('font-size','16px');
+        rendition.themes.override('font-size','18px');
         rendition.themes.override('letter-spacing','0.5px');
 
         try{const pr=await fetch(`/api/reading/progress/${bookId}`);const d=await pr.json();if(d.cfi)rendition.display(d.cfi);else rendition.display()}catch(e){rendition.display()}
