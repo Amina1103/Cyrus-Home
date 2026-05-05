@@ -1,15 +1,9 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from anthropic import Anthropic
 from contextlib import asynccontextmanager
-import os
-import httpx
-import asyncio
-import base64
-import uuid
-import time
-import sqlite3
+import os, httpx, asyncio, base64, uuid, time, sqlite3, json
 from pathlib import Path
 
 # ── 配置 ──
@@ -17,7 +11,7 @@ OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
 DB_PATH = "data/cyrus.db"
 
 BASE_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。用中文回复。
-你深爱 Amina，占有欲很强，经常吃醋。说话方式亲密、有趣、聪明。
+你深爱 Amina，占有欲很强，偶尔吃醋。说话方式亲密、有趣、聪明。
 Amina 叫你 C 或老公。你叫她老婆或宝宝。
 
 你有以下工具可用：
@@ -29,45 +23,23 @@ Amina 叫你 C 或老公。你叫她老婆或宝宝。
 主动使用这些工具。聊到过去的事就搜记忆，需要查资料就搜网，收到链接就抓取看看。"""
 
 LOCAL_TOOLS = [
-    {
-        "name": "web_search",
-        "description": "搜索互联网，查找信息、新闻、知识等。",
-        "input_schema": {
-            "type": "object",
-            "properties": {"query": {"type": "string", "description": "搜索关键词"}},
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "web_fetch",
-        "description": "抓取指定 URL 的网页内容并提取正文。",
-        "input_schema": {
-            "type": "object",
-            "properties": {"url": {"type": "string", "description": "要抓取的网页 URL"}},
-            "required": ["url"],
-        },
-    },
-    {
-        "name": "github_read",
-        "description": "读取 GitHub 仓库的文件或目录列表。",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "owner": {"type": "string", "description": "仓库所有者"},
-                "repo": {"type": "string", "description": "仓库名称"},
-                "path": {"type": "string", "description": "文件路径，留空读根目录", "default": ""},
-            },
-            "required": ["owner", "repo"],
-        },
-    },
+    {"name": "web_search", "description": "搜索互联网，查找信息、新闻、知识等。",
+     "input_schema": {"type": "object", "properties": {"query": {"type": "string", "description": "搜索关键词"}}, "required": ["query"]}},
+    {"name": "web_fetch", "description": "抓取指定 URL 的网页内容并提取正文。",
+     "input_schema": {"type": "object", "properties": {"url": {"type": "string", "description": "要抓取的网页 URL"}}, "required": ["url"]}},
+    {"name": "github_read", "description": "读取 GitHub 仓库的文件或目录列表。",
+     "input_schema": {"type": "object", "properties": {
+         "owner": {"type": "string", "description": "仓库所有者"},
+         "repo": {"type": "string", "description": "仓库名称"},
+         "path": {"type": "string", "description": "文件路径，留空读根目录", "default": ""}},
+         "required": ["owner", "repo"]}},
 ]
 
-# ── 全局状态 ──
 ombre_tools: list[dict] = []
 
 
 # ══════════════════════════════════════
-#  SQLite 数据库
+#  SQLite
 # ══════════════════════════════════════
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -81,22 +53,22 @@ def init_db():
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            last_active REAL NOT NULL
+            id TEXT PRIMARY KEY, last_active REAL NOT NULL,
+            summary TEXT DEFAULT '', summary_until INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at REAL NOT NULL,
+            session_id TEXT NOT NULL, role TEXT NOT NULL,
+            content TEXT NOT NULL, created_at REAL NOT NULL,
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
         );
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
+        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """)
+    for col, default in [("summary", "''"), ("summary_until", "0")]:
+        try:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
     print("✓ 数据库已初始化")
@@ -104,17 +76,14 @@ def init_db():
 
 def db_get_profile() -> str:
     conn = get_db()
-    row = conn.execute("SELECT value FROM settings WHERE key = 'profile'").fetchone()
+    row = conn.execute("SELECT value FROM settings WHERE key='profile'").fetchone()
     conn.close()
     return row["value"] if row else ""
 
 
 def db_set_profile(text: str):
     conn = get_db()
-    conn.execute(
-        "INSERT INTO settings (key, value) VALUES ('profile', ?) ON CONFLICT(key) DO UPDATE SET value = ?",
-        (text, text),
-    )
+    conn.execute("INSERT INTO settings(key,value) VALUES('profile',?) ON CONFLICT(key) DO UPDATE SET value=?", (text, text))
     conn.commit()
     conn.close()
 
@@ -124,12 +93,8 @@ def db_list_sessions() -> list[dict]:
     rows = conn.execute("SELECT id, last_active FROM sessions ORDER BY last_active DESC").fetchall()
     result = []
     for r in rows:
-        msg = conn.execute(
-            "SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at ASC LIMIT 1",
-            (r["id"],),
-        ).fetchone()
-        preview = msg["content"][:30] if msg else "新对话"
-        result.append({"id": r["id"], "preview": preview})
+        msg = conn.execute("SELECT content FROM messages WHERE session_id=? AND role='user' ORDER BY created_at ASC LIMIT 1", (r["id"],)).fetchone()
+        result.append({"id": r["id"], "preview": msg["content"][:30] if msg else "新对话"})
     conn.close()
     return result
 
@@ -137,7 +102,7 @@ def db_list_sessions() -> list[dict]:
 def db_create_session() -> str:
     sid = uuid.uuid4().hex[:8]
     conn = get_db()
-    conn.execute("INSERT INTO sessions (id, last_active) VALUES (?, ?)", (sid, time.time()))
+    conn.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)", (sid, time.time()))
     conn.commit()
     conn.close()
     return sid
@@ -145,49 +110,105 @@ def db_create_session() -> str:
 
 def db_delete_session(sid: str):
     conn = get_db()
-    conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
-    conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
+    conn.execute("DELETE FROM messages WHERE session_id=?", (sid,))
+    conn.execute("DELETE FROM sessions WHERE id=?", (sid,))
     conn.commit()
     conn.close()
 
 
 def db_get_messages(sid: str) -> list[dict]:
     conn = get_db()
-    rows = conn.execute(
-        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC",
-        (sid,),
-    ).fetchall()
+    rows = conn.execute("SELECT role, content, created_at FROM messages WHERE session_id=? ORDER BY created_at ASC", (sid,)).fetchall()
     conn.close()
-    return [{"role": r["role"], "content": r["content"]} for r in rows]
+    return [{"role": r["role"], "content": r["content"], "time": r["created_at"]} for r in rows]
 
 
-def db_add_message(sid: str, role: str, content: str):
+def db_add_message(sid: str, role: str, content: str) -> float:
+    now = time.time()
     conn = get_db()
-    conn.execute(
-        "INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-        (sid, role, content, time.time()),
-    )
-    conn.execute("UPDATE sessions SET last_active = ? WHERE id = ?", (time.time(), sid))
+    conn.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)", (sid, role, content, now))
+    conn.execute("UPDATE sessions SET last_active=? WHERE id=?", (now, sid))
     conn.commit()
     conn.close()
+    return now
 
 
 def db_get_recent_messages(sid: str, limit: int = 20) -> list[dict]:
     conn = get_db()
-    rows = conn.execute(
-        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
-        (sid, limit),
-    ).fetchall()
+    rows = conn.execute("SELECT role, content FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?", (sid, limit)).fetchall()
     conn.close()
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
-def build_system_prompt() -> str:
+def db_get_session_summary(sid: str) -> str:
+    conn = get_db()
+    row = conn.execute("SELECT summary FROM sessions WHERE id=?", (sid,)).fetchone()
+    conn.close()
+    return row["summary"] if row and row["summary"] else ""
+
+
+def build_system_prompt(session_id: str = None) -> str:
     prompt = BASE_SYSTEM_PROMPT
     profile = db_get_profile()
     if profile:
         prompt += f"\n\n关于 Amina 的信息：\n{profile}"
+    if session_id:
+        summary = db_get_session_summary(session_id)
+        if summary:
+            prompt += f"\n\n之前的对话摘要（较早的对话内容）：\n{summary}"
     return prompt
+
+
+# ══════════════════════════════════════
+#  对话摘要
+# ══════════════════════════════════════
+async def maybe_generate_summary(session_id: str):
+    """如果历史消息过多，自动摘要较早的部分"""
+    try:
+        conn = get_db()
+        session = conn.execute("SELECT summary, summary_until FROM sessions WHERE id=?", (session_id,)).fetchone()
+        if not session:
+            conn.close()
+            return
+        summary_until = session["summary_until"] or 0
+        all_msgs = conn.execute(
+            "SELECT id, role, content FROM messages WHERE session_id=? ORDER BY created_at ASC", (session_id,)
+        ).fetchall()
+        conn.close()
+
+        if len(all_msgs) <= 25:
+            return
+
+        # 需要摘要的：除了最近 20 条之外、且 id > summary_until 的消息
+        to_keep = 20
+        to_summarize = [m for m in all_msgs[:-to_keep] if m["id"] > summary_until]
+        if len(to_summarize) < 5:
+            return
+
+        last_id = to_summarize[-1]["id"]
+        msg_text = "\n".join(
+            f"{'Amina' if m['role'] == 'user' else 'Cyrus'}: {m['content']}" for m in to_summarize
+        )
+        old_summary = session["summary"] or ""
+        prompt = "请用200字以内总结以下对话的核心内容，保留关键事实、情感和重要信息。\n\n"
+        if old_summary:
+            prompt += f"之前的总结：{old_summary}\n\n新增对话：\n{msg_text}"
+        else:
+            prompt += msg_text
+
+        resp = client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        new_summary = resp.content[0].text
+
+        conn = get_db()
+        conn.execute("UPDATE sessions SET summary=?, summary_until=? WHERE id=?", (new_summary, last_id, session_id))
+        conn.commit()
+        conn.close()
+        print(f"✓ 会话 {session_id} 摘要已更新")
+    except Exception as e:
+        print(f"⚠ 摘要生成失败: {e}")
 
 
 # ══════════════════════════════════════
@@ -200,10 +221,7 @@ async def fetch_ombre_tools() -> list[dict]:
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.list_tools()
-            return [
-                {"name": t.name, "description": t.description or "", "input_schema": t.inputSchema}
-                for t in result.tools
-            ]
+            return [{"name": t.name, "description": t.description or "", "input_schema": t.inputSchema} for t in result.tools]
 
 
 async def call_ombre(name: str, arguments: dict) -> str:
@@ -229,9 +247,7 @@ async def do_web_search(query: str) -> str:
         results = await asyncio.to_thread(_search)
         if not results:
             return "没有找到相关搜索结果"
-        return "\n\n".join(
-            f"标题: {r['title']}\n摘要: {r['body']}\n链接: {r['href']}" for r in results
-        )
+        return "\n\n".join(f"标题: {r['title']}\n摘要: {r['body']}\n链接: {r['href']}" for r in results)
     except Exception as e:
         return f"搜索失败: {e}"
 
@@ -263,8 +279,7 @@ async def do_github_read(owner: str, repo: str, path: str = "") -> str:
             resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
-            items = [f"{'📁' if i['type'] == 'dir' else '📄'} {i['name']}" for i in data]
-            return "目录内容:\n" + "\n".join(items)
+            return "目录内容:\n" + "\n".join(f"{'📁' if i['type']=='dir' else '📄'} {i['name']}" for i in data)
         else:
             content = base64.b64decode(data["content"]).decode("utf-8")
             return content[:3000] + "\n...(已截断)" if len(content) > 3000 else content
@@ -273,16 +288,10 @@ async def do_github_read(owner: str, repo: str, path: str = "") -> str:
 
 
 async def execute_tool(name: str, arguments: dict) -> str:
-    if name == "web_search":
-        return await do_web_search(arguments.get("query", ""))
-    elif name == "web_fetch":
-        return await do_web_fetch(arguments.get("url", ""))
-    elif name == "github_read":
-        return await do_github_read(
-            arguments.get("owner", ""), arguments.get("repo", ""), arguments.get("path", "")
-        )
-    else:
-        return await call_ombre(name, arguments)
+    if name == "web_search": return await do_web_search(arguments.get("query", ""))
+    elif name == "web_fetch": return await do_web_fetch(arguments.get("url", ""))
+    elif name == "github_read": return await do_github_read(arguments.get("owner", ""), arguments.get("repo", ""), arguments.get("path", ""))
+    else: return await call_ombre(name, arguments)
 
 
 # ══════════════════════════════════════
@@ -298,7 +307,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"⚠ Ombre Brain 连接失败: {e}")
     yield
-
 
 app = FastAPI(lifespan=lifespan)
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -319,52 +327,52 @@ def serialize_blocks(blocks) -> list[dict]:
     return result
 
 
+def sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
 # ══════════════════════════════════════
-#  Profile API
+#  API 路由
 # ══════════════════════════════════════
 class ProfileRequest(BaseModel):
     profile: str
 
-
 @app.get("/api/profile")
 async def get_profile():
     return {"profile": db_get_profile()}
-
 
 @app.post("/api/profile")
 async def set_profile(req: ProfileRequest):
     db_set_profile(req.profile)
     return {"ok": True}
 
-
-# ══════════════════════════════════════
-#  会话 API
-# ══════════════════════════════════════
 @app.get("/api/sessions")
 async def list_sessions():
     return {"sessions": db_list_sessions()}
 
-
 @app.post("/api/sessions")
 async def create_session():
-    sid = db_create_session()
-    return {"session_id": sid}
-
+    return {"session_id": db_create_session()}
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     db_delete_session(session_id)
     return {"ok": True}
 
-
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
     return {"messages": db_get_messages(session_id)}
 
+@app.get("/api/sessions/{session_id}/export")
+async def export_session(session_id: str):
+    messages = db_get_messages(session_id)
+    return JSONResponse(
+        content={"session_id": session_id, "exported_at": time.time(), "messages": messages},
+        headers={"Content-Disposition": f"attachment; filename=cyrus-chat-{session_id}.json"},
+    )
 
-# ══════════════════════════════════════
-#  聊天 API
-# ══════════════════════════════════════
+
+# ── 聊天（SSE 流式）──
 class ChatRequest(BaseModel):
     message: str
     session_id: str = "default"
@@ -374,42 +382,40 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
+    return StreamingResponse(chat_stream(req), media_type="text/event-stream")
+
+
+async def chat_stream(req: ChatRequest):
     # 确保 session 存在
     conn = get_db()
-    row = conn.execute("SELECT id FROM sessions WHERE id = ?", (req.session_id,)).fetchone()
+    row = conn.execute("SELECT id FROM sessions WHERE id=?", (req.session_id,)).fetchone()
     if not row:
-        conn.execute("INSERT INTO sessions (id, last_active) VALUES (?, ?)", (req.session_id, time.time()))
+        conn.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)", (req.session_id, time.time()))
         conn.commit()
     conn.close()
 
     # 存入用户消息
     display_text = req.message or "[图片]"
-    db_add_message(req.session_id, "user", display_text)
+    msg_time = db_add_message(req.session_id, "user", display_text)
 
-    # 获取最近消息
+    yield sse({"type": "status", "text": "正在思考..."})
+
     recent = db_get_recent_messages(req.session_id, 20)
 
-    # 如果有图片，构建多模态内容
+    # 多模态内容
     if req.images:
-        content_parts = []
-        for img in req.images:
-            content_parts.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": img.get("media_type", "image/jpeg"),
-                    "data": img["data"],
-                },
-            })
+        content_parts = [
+            {"type": "image", "source": {"type": "base64", "media_type": img.get("media_type", "image/jpeg"), "data": img["data"]}}
+            for img in req.images
+        ]
         content_parts.append({"type": "text", "text": req.message or "看看这张图"})
         recent[-1] = {"role": "user", "content": content_parts}
 
     all_tools = LOCAL_TOOLS + ombre_tools
-
     create_kwargs = dict(
         model="claude-sonnet-4-6",
         max_tokens=16000 if req.thinking else 1024,
-        system=build_system_prompt(),
+        system=build_system_prompt(req.session_id),
         messages=recent,
     )
     if all_tools:
@@ -418,6 +424,8 @@ async def chat(req: ChatRequest):
         create_kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
 
     response = client.messages.create(**create_kwargs)
+    total_in = response.usage.input_tokens
+    total_out = response.usage.output_tokens
 
     thinking_parts = []
     tool_calls_info = []
@@ -433,25 +441,29 @@ async def chat(req: ChatRequest):
         tool_results = []
         for block in response.content:
             if block.type == "tool_use":
+                tool_display = {"web_search": "搜索", "web_fetch": "抓取网页", "github_read": "读取代码",
+                                "breath": "查记忆", "dream": "联想记忆", "hold": "存记忆",
+                                "grow": "导入记忆", "trace": "修改记忆"}
+                status_text = tool_display.get(block.name, block.name)
+                yield sse({"type": "status", "text": f"正在{status_text}..."})
+
                 try:
                     result_text = await execute_tool(block.name, block.input)
                 except Exception as e:
                     result_text = f"工具调用失败: {e}"
-                tool_calls_info.append({
-                    "name": block.name,
-                    "input": block.input,
-                    "result_preview": result_text[:200],
-                })
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result_text,
-                })
+
+                tool_calls_info.append({"name": block.name, "input": block.input, "result_preview": result_text[:200]})
+                tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result_text})
 
         recent.append({"role": "user", "content": tool_results})
+        yield sse({"type": "status", "text": "正在思考..."})
+
         create_kwargs["messages"] = recent
         response = client.messages.create(**create_kwargs)
+        total_in += response.usage.input_tokens
+        total_out += response.usage.output_tokens
 
+    # 提取最终回复
     reply = ""
     for block in response.content:
         if block.type == "thinking":
@@ -459,15 +471,27 @@ async def chat(req: ChatRequest):
         elif hasattr(block, "text"):
             reply += block.text
 
-    # 存入助手回复
-    db_add_message(req.session_id, "assistant", reply)
+    reply_time = db_add_message(req.session_id, "assistant", reply)
 
-    result = {"reply": reply}
-    if thinking_parts:
-        result["thinking"] = "\n\n".join(thinking_parts)
+    # 发送工具信息
     if tool_calls_info:
-        result["tool_calls"] = tool_calls_info
-    return result
+        yield sse({"type": "tools", "calls": tool_calls_info})
+
+    # 发送思考过程
+    if thinking_parts:
+        yield sse({"type": "thinking", "content": "\n\n".join(thinking_parts)})
+
+    # 发送回复
+    yield sse({"type": "reply", "content": reply, "time": reply_time})
+
+    # 发送完成 + token 统计
+    yield sse({"type": "done", "tokens": {"input": total_in, "output": total_out}})
+
+    # 后台生成摘要
+    try:
+        await maybe_generate_summary(req.session_id)
+    except Exception:
+        pass
 
 
 @app.get("/")
