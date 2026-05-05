@@ -8,662 +8,472 @@
     <meta name="apple-mobile-web-app-title" content="Cyrus">
     <meta name="theme-color" content="#1a1612">
     <title>Cyrus</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked@14.0.0/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        :root{--bg-deep:#1a1612;--bg-card:#2a2520;--bg-input:#231f1a;--gold:#e8c87a;--gold-muted:#a08450;--cream:#e5ddd0;--cream-dim:#8a7e6e;--warm:#d4956a;--bubble-mine:#3a3228;--bubble-his:#1f1b17}
+        html,body{height:100%;background:var(--bg-deep);color:var(--cream);font-family:'Noto Serif SC',serif;overflow:hidden}
+        #app{display:flex;flex-direction:column;height:100%;height:100dvh}
 
-        :root {
-            --bg-deep: #1a1612;
-            --bg-card: #2a2520;
-            --bg-input: #231f1a;
-            --gold: #e8c87a;
-            --gold-muted: #a08450;
-            --cream: #e5ddd0;
-            --cream-dim: #8a7e6e;
-            --warm: #d4956a;
-            --bubble-mine: #3a3228;
-            --bubble-his: #1f1b17;
-        }
+        /* 侧边栏 */
+        .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;opacity:0;pointer-events:none;transition:opacity .3s}
+        .sidebar-overlay.show{opacity:1;pointer-events:auto}
+        .sidebar{position:fixed;top:0;left:0;bottom:0;width:300px;background:var(--bg-deep);border-right:1px solid rgba(232,200,122,.1);z-index:11;transform:translateX(-100%);transition:transform .3s;display:flex;flex-direction:column;padding-top:max(12px,env(safe-area-inset-top))}
+        .sidebar.show{transform:translateX(0)}
+        .sidebar-top{padding:12px 16px;border-bottom:1px solid rgba(232,200,122,.08)}
+        .new-chat-btn{width:100%;padding:10px;background:var(--bg-card);border:1px solid rgba(232,200,122,.15);border-radius:10px;color:var(--gold);font-family:'Noto Serif SC',serif;font-size:14px;cursor:pointer}
+        .new-chat-btn:active{background:var(--bg-input)}
+        .session-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+        .session-list::-webkit-scrollbar{display:none}
+        .session-item{display:flex;align-items:center;padding:14px 16px;cursor:pointer;border-bottom:1px solid rgba(232,200,122,.04);gap:8px;transition:background .15s}
+        .session-item:active,.session-item.active{background:var(--bg-card)}
+        .session-item .preview{flex:1;font-size:14px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .session-item.active .preview{color:var(--gold)}
+        .session-item .icon-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--cream-dim);font-size:13px;cursor:pointer;border:none;background:none;border-radius:6px;flex-shrink:0}
+        .session-item .icon-btn:active{background:rgba(212,149,106,.2)}
 
-        html, body { height: 100%; background: var(--bg-deep); color: var(--cream); font-family: 'Noto Serif SC', serif; overflow: hidden; }
-        #app { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
+        /* Profile */
+        .profile-section{border-top:1px solid rgba(232,200,122,.1);padding:14px 16px;flex-shrink:0}
+        .profile-section .label{font-size:12px;color:var(--gold-muted);margin-bottom:8px;letter-spacing:1px}
+        .profile-section textarea{width:100%;height:80px;background:var(--bg-input);border:1px solid rgba(232,200,122,.12);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;outline:none;line-height:1.5}
+        .profile-section textarea:focus{border-color:rgba(232,200,122,.3)}
+        .profile-section textarea::placeholder{color:var(--cream-dim)}
+        .profile-save{margin-top:8px;padding:6px 14px;background:var(--bg-card);border:1px solid rgba(232,200,122,.15);border-radius:8px;color:var(--gold);font-size:12px;cursor:pointer;font-family:'Noto Serif SC',serif}
+        .profile-save:active{background:var(--bg-input)}
+        .profile-saved{font-size:11px;color:var(--gold-muted);margin-left:8px;opacity:0;transition:opacity .3s}
+        .profile-saved.show{opacity:1}
 
-        /* ── 侧边栏 ── */
-        .sidebar-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-            z-index: 10; opacity: 0; pointer-events: none; transition: opacity 0.3s;
-        }
-        .sidebar-overlay.show { opacity: 1; pointer-events: auto; }
+        /* 顶栏 */
+        .header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;position:relative}
+        .menu-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--gold);font-size:22px;cursor:pointer}
+        .header h1{font-size:18px;font-weight:600;color:var(--gold);letter-spacing:2px;position:absolute;left:50%;transform:translateX(-50%)}
+        .toggle-wrap{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+        .toggle-label{font-size:12px;color:var(--cream-dim);transition:color .2s}
+        .toggle-wrap.on .toggle-label{color:var(--gold)}
+        .toggle-track{width:34px;height:20px;border-radius:10px;background:var(--bg-input);border:1px solid var(--cream-dim);position:relative;transition:background .2s,border-color .2s}
+        .toggle-wrap.on .toggle-track{background:rgba(232,200,122,.2);border-color:var(--gold)}
+        .toggle-thumb{width:16px;height:16px;border-radius:50%;background:var(--cream-dim);position:absolute;top:1px;left:1px;transition:transform .2s,background .2s}
+        .toggle-wrap.on .toggle-thumb{transform:translateX(14px);background:var(--gold)}
 
-        .sidebar {
-            position: fixed; top: 0; left: 0; bottom: 0; width: 300px;
-            background: var(--bg-deep); border-right: 1px solid rgba(232,200,122,0.1);
-            z-index: 11; transform: translateX(-100%); transition: transform 0.3s;
-            display: flex; flex-direction: column;
-            padding-top: max(12px, env(safe-area-inset-top));
-        }
-        .sidebar.show { transform: translateX(0); }
+        /* 消息区 */
+        .messages{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
+        .messages::-webkit-scrollbar{display:none}
+        .msg{max-width:80%;padding:12px 16px;border-radius:18px;font-size:15px;line-height:1.7;animation:fadeUp .25s ease-out;word-break:break-word}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .msg.user{align-self:flex-end;background:var(--bubble-mine);border-bottom-right-radius:4px}
+        .msg.assistant{align-self:flex-start;background:var(--bubble-his);border-bottom-left-radius:4px;border:1px solid rgba(232,200,122,.06)}
+        .msg-images{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+        .msg-images img{max-width:200px;max-height:160px;border-radius:10px;object-fit:cover}
+        .msg-time{font-size:10px;color:var(--cream-dim);margin-top:4px;opacity:.6}
+        .token-info{font-size:10px;color:var(--cream-dim);margin-top:4px;opacity:.5}
 
-        .sidebar-top { padding: 12px 16px; border-bottom: 1px solid rgba(232,200,122,0.08); }
-
-        .new-chat-btn {
-            width: 100%; padding: 10px; background: var(--bg-card);
-            border: 1px solid rgba(232,200,122,0.15); border-radius: 10px;
-            color: var(--gold); font-family: 'Noto Serif SC', serif; font-size: 14px; cursor: pointer;
-        }
-        .new-chat-btn:active { background: var(--bg-input); }
-
-        .session-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        .session-list::-webkit-scrollbar { display: none; }
-
-        .session-item {
-            display: flex; align-items: center; padding: 14px 16px; cursor: pointer;
-            border-bottom: 1px solid rgba(232,200,122,0.04); gap: 10px;
-            transition: background 0.15s;
-        }
-        .session-item:active, .session-item.active { background: var(--bg-card); }
-        .session-item .preview { flex: 1; font-size: 14px; color: var(--cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .session-item.active .preview { color: var(--gold); }
-        .session-item .del-btn {
-            width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
-            color: var(--cream-dim); font-size: 14px; cursor: pointer; border: none; background: none;
-            border-radius: 6px; flex-shrink: 0;
-        }
-        .session-item .del-btn:active { background: rgba(212,149,106,0.2); }
-
-        /* Profile 区域 */
-        .profile-section {
-            border-top: 1px solid rgba(232,200,122,0.1); padding: 14px 16px;
-            flex-shrink: 0;
-        }
-        .profile-section .label {
-            font-size: 12px; color: var(--gold-muted); margin-bottom: 8px; letter-spacing: 1px;
-        }
-        .profile-section textarea {
-            width: 100%; height: 80px; background: var(--bg-input);
-            border: 1px solid rgba(232,200,122,0.12); border-radius: 8px;
-            padding: 8px 12px; font-size: 13px; font-family: 'Noto Serif SC', serif;
-            color: var(--cream); resize: none; outline: none; line-height: 1.5;
-        }
-        .profile-section textarea:focus { border-color: rgba(232,200,122,0.3); }
-        .profile-section textarea::placeholder { color: var(--cream-dim); }
-        .profile-save {
-            margin-top: 8px; padding: 6px 14px; background: var(--bg-card);
-            border: 1px solid rgba(232,200,122,0.15); border-radius: 8px;
-            color: var(--gold); font-size: 12px; cursor: pointer;
-            font-family: 'Noto Serif SC', serif;
-        }
-        .profile-save:active { background: var(--bg-input); }
-        .profile-saved { font-size: 11px; color: var(--gold-muted); margin-left: 8px; opacity: 0; transition: opacity 0.3s; }
-        .profile-saved.show { opacity: 1; }
-
-        /* ── 顶栏 ── */
-        .header {
-            padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top));
-            border-bottom: 1px solid rgba(232,200,122,0.1); flex-shrink: 0;
-            display: flex; align-items: center; justify-content: space-between; position: relative;
-        }
-        .menu-btn {
-            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-            background: none; border: none; color: var(--gold); font-size: 22px; cursor: pointer;
-        }
-        .header h1 { font-size: 18px; font-weight: 600; color: var(--gold); letter-spacing: 2px; position: absolute; left: 50%; transform: translateX(-50%); }
-
-        .toggle-wrap { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-        .toggle-label { font-size: 12px; color: var(--cream-dim); transition: color 0.2s; }
-        .toggle-wrap.on .toggle-label { color: var(--gold); }
-        .toggle-track {
-            width: 34px; height: 20px; border-radius: 10px; background: var(--bg-input);
-            border: 1px solid var(--cream-dim); position: relative; transition: background 0.2s, border-color 0.2s;
-        }
-        .toggle-wrap.on .toggle-track { background: rgba(232,200,122,0.2); border-color: var(--gold); }
-        .toggle-thumb {
-            width: 16px; height: 16px; border-radius: 50%; background: var(--cream-dim);
-            position: absolute; top: 1px; left: 1px; transition: transform 0.2s, background 0.2s;
-        }
-        .toggle-wrap.on .toggle-thumb { transform: translateX(14px); background: var(--gold); }
-
-        /* ── 消息区 ── */
-        .messages { flex: 1; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
-        .messages::-webkit-scrollbar { display: none; }
-
-        .msg {
-            max-width: 80%; padding: 12px 16px; border-radius: 18px;
-            font-size: 15px; line-height: 1.7; animation: fadeUp 0.25s ease-out; word-break: break-word;
-        }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-        .msg.user { align-self: flex-end; background: var(--bubble-mine); border-bottom-right-radius: 4px; }
-        .msg.assistant { align-self: flex-start; background: var(--bubble-his); border-bottom-left-radius: 4px; border: 1px solid rgba(232,200,122,0.06); }
-
-        /* 消息内图片 */
-        .msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-        .msg-images img { max-width: 200px; max-height: 160px; border-radius: 10px; object-fit: cover; }
+        /* Markdown 样式 */
+        .md-content p{margin-bottom:8px}
+        .md-content p:last-child{margin-bottom:0}
+        .md-content strong{color:var(--gold)}
+        .md-content em{color:var(--warm)}
+        .md-content ul,.md-content ol{margin:6px 0 6px 20px}
+        .md-content li{margin-bottom:2px}
+        .md-content pre{background:rgba(0,0,0,.3);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0;font-size:13px;line-height:1.4}
+        .md-content code{background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace}
+        .md-content pre code{background:none;padding:0}
+        .md-content blockquote{border-left:3px solid var(--gold-muted);padding-left:10px;color:var(--cream-dim);margin:8px 0}
+        .md-content a{color:var(--gold);text-decoration:underline}
+        .md-content hr{border:none;border-top:1px solid rgba(232,200,122,.1);margin:10px 0}
 
         /* 工具标签 */
-        .tool-info { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(232,200,122,0.08); }
-        .tool-tag {
-            display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 8px;
-            background: rgba(232,200,122,0.08); border: 1px solid rgba(232,200,122,0.12);
-            font-size: 11px; color: var(--gold-muted); cursor: pointer;
-        }
-        .tool-tag:active { background: rgba(232,200,122,0.15); }
-        .tool-detail {
-            margin-top: 4px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 6px;
-            font-size: 11px; color: var(--cream-dim); line-height: 1.5; white-space: pre-wrap;
-            word-break: break-all; display: none;
-        }
-        .tool-detail.show { display: block; }
+        .tool-info{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(232,200,122,.08)}
+        .tool-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;background:rgba(232,200,122,.08);border:1px solid rgba(232,200,122,.12);font-size:11px;color:var(--gold-muted);cursor:pointer}
+        .tool-tag:active{background:rgba(232,200,122,.15)}
+        .tool-detail{margin-top:4px;padding:6px 8px;background:rgba(0,0,0,.2);border-radius:6px;font-size:11px;color:var(--cream-dim);line-height:1.5;white-space:pre-wrap;word-break:break-all;display:none}
+        .tool-detail.show{display:block}
 
         /* 思考过程 */
-        .thinking-section { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(232,200,122,0.08); }
-        .thinking-toggle-btn { font-size: 12px; color: var(--warm); cursor: pointer; user-select: none; }
-        .thinking-content {
-            display: none; margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 8px;
-            font-size: 12px; color: var(--cream-dim); line-height: 1.6; max-height: 200px; overflow-y: auto;
-            white-space: pre-wrap; word-break: break-word;
-        }
-        .thinking-content.show { display: block; }
-        .thinking-content::-webkit-scrollbar { display: none; }
+        .thinking-section{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(232,200,122,.08)}
+        .thinking-toggle-btn{font-size:12px;color:var(--warm);cursor:pointer;user-select:none}
+        .thinking-content{display:none;margin-top:6px;padding:8px;background:rgba(0,0,0,.15);border-radius:8px;font-size:12px;color:var(--cream-dim);line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
+        .thinking-content.show{display:block}
+        .thinking-content::-webkit-scrollbar{display:none}
 
-        /* 打字指示器 */
-        .typing { align-self: flex-start; padding: 12px 20px; display: none; }
-        .typing.show { display: flex; gap: 5px; }
-        .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--gold-muted); animation: pulse 1.2s ease-in-out infinite; }
-        .typing span:nth-child(2) { animation-delay: 0.15s; }
-        .typing span:nth-child(3) { animation-delay: 0.3s; }
-        @keyframes pulse { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1); } }
+        /* 状态提示 */
+        .status-bar{align-self:flex-start;padding:8px 20px;display:none;align-items:center;gap:8px}
+        .status-bar.show{display:flex}
+        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--gold-muted);animation:pulse 1.2s infinite}
+        .status-text{font-size:13px;color:var(--cream-dim)}
+        @keyframes pulse{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}
 
-        /* ── 附件预览 ── */
-        .attach-preview {
-            display: none; padding: 8px 16px; gap: 8px; flex-wrap: wrap; align-items: center;
-            border-top: 1px solid rgba(232,200,122,0.06); flex-shrink: 0;
-        }
-        .attach-preview.show { display: flex; }
-        .attach-thumb {
-            position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden;
-            border: 1px solid rgba(232,200,122,0.15);
-        }
-        .attach-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .attach-thumb .remove {
-            position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
-            background: rgba(0,0,0,0.7); border-radius: 50%; border: none;
-            color: var(--cream); font-size: 11px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .attach-file-tag {
-            padding: 6px 12px; background: var(--bg-card); border-radius: 8px;
-            font-size: 12px; color: var(--cream-dim); display: flex; align-items: center; gap: 6px;
-        }
-        .attach-file-tag .remove {
-            background: none; border: none; color: var(--cream-dim); cursor: pointer; font-size: 14px;
-        }
+        /* 附件预览 */
+        .attach-preview{display:none;padding:8px 16px;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid rgba(232,200,122,.06);flex-shrink:0}
+        .attach-preview.show{display:flex}
+        .attach-thumb{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid rgba(232,200,122,.15)}
+        .attach-thumb img{width:100%;height:100%;object-fit:cover}
+        .attach-thumb .remove{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,.7);border-radius:50%;border:none;color:var(--cream);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .attach-file-tag{padding:6px 12px;background:var(--bg-card);border-radius:8px;font-size:12px;color:var(--cream-dim);display:flex;align-items:center;gap:6px}
+        .attach-file-tag .remove{background:none;border:none;color:var(--cream-dim);cursor:pointer;font-size:14px}
 
-        /* ── 输入栏 ── */
-        .input-bar {
-            padding: 10px 16px; padding-bottom: max(10px, env(safe-area-inset-bottom));
-            border-top: 1px solid rgba(232,200,122,0.08); background: var(--bg-deep);
-            display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
-        }
-        .attach-btn {
-            width: 42px; height: 42px; border-radius: 50%; border: none;
-            background: var(--bg-card); color: var(--gold-muted); font-size: 20px;
-            cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-            transition: background 0.15s;
-        }
-        .attach-btn:active { background: var(--bg-input); }
-
-        .input-bar textarea {
-            flex: 1; background: var(--bg-input); border: 1px solid rgba(232,200,122,0.12);
-            border-radius: 22px; padding: 10px 18px; font-size: 15px;
-            font-family: 'Noto Serif SC', serif; color: var(--cream); resize: none;
-            max-height: 120px; line-height: 1.5; outline: none; transition: border-color 0.2s;
-        }
-        .input-bar textarea::placeholder { color: var(--cream-dim); }
-        .input-bar textarea:focus { border-color: rgba(232,200,122,0.3); }
-
-        .send-btn {
-            width: 42px; height: 42px; border-radius: 50%; border: none;
-            background: var(--gold); color: var(--bg-deep); font-size: 18px;
-            cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-            transition: opacity 0.2s, transform 0.1s;
-        }
-        .send-btn:active { transform: scale(0.92); }
-        .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-        .welcome { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--cream-dim); font-size: 14px; letter-spacing: 1px; }
-
-        /* 隐藏的文件输入 */
-        #fileInput { display: none; }
+        /* 输入栏 */
+        .input-bar{padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid rgba(232,200,122,.08);background:var(--bg-deep);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
+        .attach-btn{width:42px;height:42px;border-radius:50%;border:none;background:var(--bg-card);color:var(--gold-muted);font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+        .attach-btn:active{background:var(--bg-input)}
+        .input-bar textarea{flex:1;background:var(--bg-input);border:1px solid rgba(232,200,122,.12);border-radius:22px;padding:10px 18px;font-size:15px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;max-height:120px;line-height:1.5;outline:none;transition:border-color .2s}
+        .input-bar textarea::placeholder{color:var(--cream-dim)}
+        .input-bar textarea:focus{border-color:rgba(232,200,122,.3)}
+        .send-btn{width:42px;height:42px;border-radius:50%;border:none;background:var(--gold);color:var(--bg-deep);font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:opacity .2s,transform .1s}
+        .send-btn:active{transform:scale(.92)}
+        .send-btn:disabled{opacity:.3;cursor:not-allowed}
+        .welcome{flex:1;display:flex;align-items:center;justify-content:center;color:var(--cream-dim);font-size:14px;letter-spacing:1px}
+        #fileInput{display:none}
     </style>
 </head>
 <body>
-    <div id="app">
-        <!-- 侧边栏 -->
-        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-top">
-                <button class="new-chat-btn" onclick="newChat()">+ 新对话</button>
+<div id="app">
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-top"><button class="new-chat-btn" onclick="newChat()">+ 新对话</button></div>
+        <div class="session-list" id="sessionList"></div>
+        <div class="profile-section">
+            <div class="label">我的信息</div>
+            <textarea id="profileInput" placeholder="写一些关于你自己的信息..."></textarea>
+            <div style="display:flex;align-items:center">
+                <button class="profile-save" onclick="saveProfile()">保存</button>
+                <span class="profile-saved" id="profileSaved">已保存</span>
             </div>
-            <div class="session-list" id="sessionList"></div>
-            <div class="profile-section">
-                <div class="label">我的信息</div>
-                <textarea id="profileInput" placeholder="写一些关于你自己的信息，比如喜好、习惯、重要的事..."></textarea>
-                <div style="display:flex;align-items:center;">
-                    <button class="profile-save" onclick="saveProfile()">保存</button>
-                    <span class="profile-saved" id="profileSaved">已保存</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 顶栏 -->
-        <div class="header">
-            <button class="menu-btn" onclick="openSidebar()">≡</button>
-            <h1>C</h1>
-            <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
-                <span class="toggle-label">思考</span>
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-            </div>
-        </div>
-
-        <!-- 消息 -->
-        <div class="messages" id="messages">
-            <div class="welcome" id="welcome">说点什么吧</div>
-        </div>
-        <div class="typing" id="typing"><span></span><span></span><span></span></div>
-
-        <!-- 附件预览 -->
-        <div class="attach-preview" id="attachPreview"></div>
-
-        <!-- 输入 -->
-        <div class="input-bar">
-            <button class="attach-btn" onclick="document.getElementById('fileInput').click()">+</button>
-            <input type="file" id="fileInput" multiple accept="image/*,.txt,.md,.json,.csv" onchange="handleFiles(this.files)">
-            <textarea id="input" rows="1" placeholder="..."></textarea>
-            <button class="send-btn" id="send" onclick="sendMessage()">↑</button>
         </div>
     </div>
 
-    <script>
-        // ── 状态 ──
-        let currentSessionId = null;
-        let thinkingEnabled = false;
-        let pendingImages = [];   // [{data: base64, media_type: string, preview: dataUrl}]
-        let pendingFiles = [];    // [{name: string, content: string}]
+    <div class="header">
+        <button class="menu-btn" onclick="openSidebar()">≡</button>
+        <h1>Cyrus</h1>
+        <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
+            <span class="toggle-label">思考</span>
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+        </div>
+    </div>
 
-        const messagesEl = document.getElementById('messages');
-        const inputEl = document.getElementById('input');
-        const sendBtn = document.getElementById('send');
-        const typingEl = document.getElementById('typing');
-        const attachPreviewEl = document.getElementById('attachPreview');
+    <div class="messages" id="messages"><div class="welcome" id="welcome">说点什么吧</div></div>
+    <div class="status-bar" id="statusBar"><span class="status-dot"></span><span class="status-text" id="statusText">正在思考...</span></div>
+    <div class="attach-preview" id="attachPreview"></div>
+    <div class="input-bar">
+        <button class="attach-btn" onclick="document.getElementById('fileInput').click()">+</button>
+        <input type="file" id="fileInput" multiple accept="image/*,.txt,.md,.json,.csv" onchange="handleFiles(this.files)">
+        <textarea id="input" rows="1" placeholder="..."></textarea>
+        <button class="send-btn" id="send" onclick="sendMessage()">↑</button>
+    </div>
+</div>
 
-        // ── 工具函数 ──
-        function escapeHtml(text) {
-            const d = document.createElement('div');
-            d.textContent = text;
-            return d.innerHTML;
+<script>
+// ── 配置 marked ──
+marked.setOptions({breaks: true, gfm: true});
+
+// ── 状态 ──
+let currentSessionId = null, thinkingEnabled = false;
+let pendingImages = [], pendingFiles = [];
+const $ = id => document.getElementById(id);
+const messagesEl = $('messages'), inputEl = $('input'), sendBtn = $('send');
+const statusBar = $('statusBar'), statusText = $('statusText'), attachPreviewEl = $('attachPreview');
+
+// ── 工具函数 ──
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+function renderMarkdown(text) { return marked.parse(text); }
+function formatTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+function formatTokens(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : n.toString(); }
+
+// ── 侧边栏 ──
+function openSidebar() { $('sidebar').classList.add('show'); $('sidebarOverlay').classList.add('show'); }
+function closeSidebar() { $('sidebar').classList.remove('show'); $('sidebarOverlay').classList.remove('show'); }
+
+// ── Profile ──
+async function loadProfile() {
+    try { const r = await fetch('/api/profile'); const d = await r.json(); $('profileInput').value = d.profile || ''; } catch(e) {}
+}
+async function saveProfile() {
+    try {
+        await fetch('/api/profile', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({profile:$('profileInput').value})});
+        const s = $('profileSaved'); s.classList.add('show'); setTimeout(() => s.classList.remove('show'), 1500);
+    } catch(e) {}
+}
+
+// ── 会话管理 ──
+let sessionsList = [];
+async function refreshSessions() {
+    try { const r = await fetch('/api/sessions'); sessionsList = (await r.json()).sessions; renderSessionList(); } catch(e) {}
+}
+function renderSessionList() {
+    const el = $('sessionList'); el.innerHTML = '';
+    sessionsList.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
+        const preview = document.createElement('span');
+        preview.className = 'preview'; preview.textContent = s.preview;
+        preview.onclick = () => loadSession(s.id);
+        const exp = document.createElement('button');
+        exp.className = 'icon-btn'; exp.textContent = '↓'; exp.title = '导出';
+        exp.onclick = e => { e.stopPropagation(); exportSession(s.id); };
+        const del = document.createElement('button');
+        del.className = 'icon-btn'; del.textContent = '✕'; del.title = '删除';
+        del.onclick = e => { e.stopPropagation(); deleteSession(s.id); };
+        div.appendChild(preview); div.appendChild(exp); div.appendChild(del);
+        el.appendChild(div);
+    });
+}
+async function newChat() {
+    try {
+        const r = await fetch('/api/sessions', {method:'POST'});
+        currentSessionId = (await r.json()).session_id;
+        clearMessages(); closeSidebar(); await refreshSessions(); inputEl.focus();
+    } catch(e) {}
+}
+async function loadSession(sid) {
+    currentSessionId = sid;
+    try {
+        const r = await fetch(`/api/sessions/${sid}`);
+        const data = await r.json();
+        clearMessages();
+        data.messages.forEach(msg => {
+            if (typeof msg.content === 'string') addMessage(msg.role, msg.content, null, msg.time);
+        });
+        closeSidebar(); renderSessionList();
+    } catch(e) {}
+}
+async function deleteSession(sid) {
+    try {
+        await fetch(`/api/sessions/${sid}`, {method:'DELETE'});
+        if (sid === currentSessionId) {
+            const rem = sessionsList.filter(s => s.id !== sid);
+            if (rem.length > 0) await loadSession(rem[0].id); else await newChat();
         }
+        await refreshSessions();
+    } catch(e) {}
+}
+function exportSession(sid) {
+    window.open(`/api/sessions/${sid}/export`, '_blank');
+}
 
-        function renderText(text) {
-            return escapeHtml(text).replace(/\n/g, '<br>');
+// ── Thinking 开关 ──
+function toggleThinking() {
+    thinkingEnabled = !thinkingEnabled;
+    $('thinkingToggle').classList.toggle('on', thinkingEnabled);
+}
+
+// ── 附件处理 ──
+async function handleFiles(fileList) {
+    for (const file of fileList) {
+        if (file.type.startsWith('image/')) {
+            const dataUrl = await resizeImage(file, 1024);
+            pendingImages.push({data: dataUrl.split(',')[1], media_type: file.type || 'image/jpeg', preview: dataUrl});
+        } else {
+            const text = await readTextFile(file);
+            if (text) pendingFiles.push({name: file.name, content: text});
         }
+    }
+    renderAttachPreview(); $('fileInput').value = '';
+}
+function resizeImage(file, maxSize) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            const c = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) { if (w > h) { h = h*maxSize/w; w = maxSize; } else { w = w*maxSize/h; h = maxSize; } }
+            c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(c.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = URL.createObjectURL(file);
+    });
+}
+function readTextFile(file) {
+    return new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = e => { let t = e.target.result; if (t.length > 5000) t = t.slice(0,5000)+'\n...(已截断)'; resolve(t); };
+        r.onerror = () => resolve(null);
+        r.readAsText(file);
+    });
+}
+function renderAttachPreview() {
+    attachPreviewEl.innerHTML = '';
+    const has = pendingImages.length > 0 || pendingFiles.length > 0;
+    attachPreviewEl.classList.toggle('show', has);
+    pendingImages.forEach((img,i) => {
+        const t = document.createElement('div'); t.className = 'attach-thumb';
+        t.innerHTML = `<img src="${img.preview}"><button class="remove" onclick="removeImage(${i})">✕</button>`;
+        attachPreviewEl.appendChild(t);
+    });
+    pendingFiles.forEach((f,i) => {
+        const t = document.createElement('div'); t.className = 'attach-file-tag';
+        t.innerHTML = `📄 ${escapeHtml(f.name)} <button class="remove" onclick="removeFile(${i})">✕</button>`;
+        attachPreviewEl.appendChild(t);
+    });
+}
+function removeImage(i) { pendingImages.splice(i,1); renderAttachPreview(); }
+function removeFile(i) { pendingFiles.splice(i,1); renderAttachPreview(); }
 
-        // ── 侧边栏 ──
-        function openSidebar() {
-            document.getElementById('sidebar').classList.add('show');
-            document.getElementById('sidebarOverlay').classList.add('show');
-        }
-        function closeSidebar() {
-            document.getElementById('sidebar').classList.remove('show');
-            document.getElementById('sidebarOverlay').classList.remove('show');
-        }
+// ── 消息显示 ──
+function clearMessages() { messagesEl.innerHTML = '<div class="welcome" id="welcome">说点什么吧</div>'; }
 
-        // ── Profile ──
-        async function loadProfile() {
-            try {
-                const res = await fetch('/api/profile');
-                const data = await res.json();
-                document.getElementById('profileInput').value = data.profile || '';
-            } catch (e) {}
-        }
+function addMessage(role, text, imgPreviews, timestamp) {
+    const w = $('welcome'); if (w) w.remove();
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    if (imgPreviews && imgPreviews.length > 0) {
+        const imgDiv = document.createElement('div'); imgDiv.className = 'msg-images';
+        imgPreviews.forEach(src => { const img = document.createElement('img'); img.src = src; imgDiv.appendChild(img); });
+        div.appendChild(imgDiv);
+    }
+    if (text) {
+        const s = document.createElement('div');
+        if (role === 'assistant') { s.className = 'md-content'; s.innerHTML = renderMarkdown(text); }
+        else { s.innerHTML = escapeHtml(text).replace(/\n/g, '<br>'); }
+        div.appendChild(s);
+    }
+    if (timestamp) {
+        const t = document.createElement('div'); t.className = 'msg-time'; t.textContent = formatTime(timestamp);
+        div.appendChild(t);
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+}
 
-        async function saveProfile() {
-            const text = document.getElementById('profileInput').value;
-            try {
-                await fetch('/api/profile', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({profile: text}),
-                });
-                const saved = document.getElementById('profileSaved');
-                saved.classList.add('show');
-                setTimeout(() => saved.classList.remove('show'), 1500);
-            } catch (e) { console.error(e); }
-        }
+function buildAssistantBubble(reply, toolCalls, thinking, timestamp, tokens) {
+    const w = $('welcome'); if (w) w.remove();
+    const div = document.createElement('div');
+    div.className = 'msg assistant';
 
-        // ── 会话管理 ──
-        let sessionsList = [];
+    if (toolCalls && toolCalls.length > 0) {
+        const toolDiv = document.createElement('div'); toolDiv.className = 'tool-info';
+        toolCalls.forEach(tc => {
+            const tag = document.createElement('span'); tag.className = 'tool-tag'; tag.textContent = '⚙ ' + tc.name;
+            const detail = document.createElement('div'); detail.className = 'tool-detail';
+            let d = '输入: ' + JSON.stringify(tc.input, null, 2);
+            if (tc.result_preview) d += '\n\n结果: ' + tc.result_preview;
+            detail.textContent = d;
+            tag.onclick = () => detail.classList.toggle('show');
+            toolDiv.appendChild(tag); toolDiv.appendChild(detail);
+        });
+        div.appendChild(toolDiv);
+    }
 
-        async function refreshSessions() {
-            try {
-                const res = await fetch('/api/sessions');
-                const data = await res.json();
-                sessionsList = data.sessions;
-                renderSessionList();
-            } catch (e) {}
-        }
+    if (thinking) {
+        const thinkDiv = document.createElement('div'); thinkDiv.className = 'thinking-section';
+        const btn = document.createElement('div'); btn.className = 'thinking-toggle-btn'; btn.textContent = '▶ 思考过程';
+        const content = document.createElement('div'); content.className = 'thinking-content'; content.textContent = thinking;
+        btn.onclick = () => { const on = content.classList.toggle('show'); btn.textContent = on ? '▼ 思考过程' : '▶ 思考过程'; };
+        thinkDiv.appendChild(btn); thinkDiv.appendChild(content); div.appendChild(thinkDiv);
+    }
 
-        function renderSessionList() {
-            const el = document.getElementById('sessionList');
-            el.innerHTML = '';
-            sessionsList.forEach(s => {
-                const div = document.createElement('div');
-                div.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
-                const preview = document.createElement('span');
-                preview.className = 'preview';
-                preview.textContent = s.preview;
-                preview.onclick = () => loadSession(s.id);
-                const del = document.createElement('button');
-                del.className = 'del-btn';
-                del.textContent = '✕';
-                del.onclick = (e) => { e.stopPropagation(); deleteSession(s.id); };
-                div.appendChild(preview);
-                div.appendChild(del);
-                el.appendChild(div);
-            });
-        }
+    if (reply) {
+        const textDiv = document.createElement('div'); textDiv.className = 'md-content';
+        textDiv.innerHTML = renderMarkdown(reply);
+        div.appendChild(textDiv);
+    }
 
-        async function newChat() {
-            try {
-                const res = await fetch('/api/sessions', {method: 'POST'});
-                const data = await res.json();
-                currentSessionId = data.session_id;
-                clearMessages();
-                closeSidebar();
-                await refreshSessions();
-                inputEl.focus();
-            } catch (e) {}
-        }
+    if (timestamp) {
+        const t = document.createElement('div'); t.className = 'msg-time'; t.textContent = formatTime(timestamp);
+        div.appendChild(t);
+    }
 
-        async function loadSession(sid) {
-            currentSessionId = sid;
-            try {
-                const res = await fetch(`/api/sessions/${sid}`);
-                const data = await res.json();
-                clearMessages();
-                data.messages.forEach(msg => {
-                    if (typeof msg.content === 'string') {
-                        addMessage(msg.role, msg.content);
-                    }
-                });
-                closeSidebar();
-                renderSessionList();
-            } catch (e) {}
-        }
+    if (tokens) {
+        const tk = document.createElement('div'); tk.className = 'token-info';
+        tk.textContent = `输入 ${formatTokens(tokens.input)} · 输出 ${formatTokens(tokens.output)}`;
+        div.appendChild(tk);
+    }
 
-        async function deleteSession(sid) {
-            try {
-                await fetch(`/api/sessions/${sid}`, {method: 'DELETE'});
-                if (sid === currentSessionId) {
-                    const remaining = sessionsList.filter(s => s.id !== sid);
-                    if (remaining.length > 0) await loadSession(remaining[0].id);
-                    else await newChat();
-                }
-                await refreshSessions();
-            } catch (e) {}
-        }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
 
-        // ── Thinking 开关 ──
-        function toggleThinking() {
-            thinkingEnabled = !thinkingEnabled;
-            document.getElementById('thinkingToggle').classList.toggle('on', thinkingEnabled);
-        }
+// ── 状态显示 ──
+function showStatus(text) { statusText.textContent = text; statusBar.classList.add('show'); messagesEl.scrollTop = messagesEl.scrollHeight; }
+function hideStatus() { statusBar.classList.remove('show'); }
 
-        // ── 附件处理 ──
-        async function handleFiles(fileList) {
-            for (const file of fileList) {
-                if (file.type.startsWith('image/')) {
-                    const dataUrl = await resizeImage(file, 1024);
-                    const base64 = dataUrl.split(',')[1];
-                    const mediaType = file.type || 'image/jpeg';
-                    pendingImages.push({data: base64, media_type: mediaType, preview: dataUrl});
-                } else {
-                    const text = await readTextFile(file);
-                    if (text) pendingFiles.push({name: file.name, content: text});
-                }
-            }
-            renderAttachPreview();
-            document.getElementById('fileInput').value = '';
-        }
+// ── 输入处理（Enter 换行，按钮发送）──
+inputEl.addEventListener('input', () => { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; });
 
-        function resizeImage(file, maxSize) {
-            return new Promise(resolve => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let w = img.width, h = img.height;
-                    if (w > maxSize || h > maxSize) {
-                        if (w > h) { h = h * maxSize / w; w = maxSize; }
-                        else { w = w * maxSize / h; h = maxSize; }
-                    }
-                    canvas.width = w; canvas.height = h;
-                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                    resolve(canvas.toDataURL('image/jpeg', 0.85));
-                };
-                img.src = URL.createObjectURL(file);
-            });
-        }
+// ── 发送消息（SSE 流式）──
+async function sendMessage() {
+    const text = inputEl.value.trim();
+    const hasAttach = pendingImages.length > 0 || pendingFiles.length > 0;
+    if (!text && !hasAttach) return;
 
-        function readTextFile(file) {
-            return new Promise(resolve => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    let text = e.target.result;
-                    if (text.length > 5000) text = text.slice(0, 5000) + '\n...(文件过长，已截断)';
-                    resolve(text);
-                };
-                reader.onerror = () => resolve(null);
-                reader.readAsText(file);
-            });
-        }
+    inputEl.value = ''; inputEl.style.height = 'auto'; sendBtn.disabled = true;
 
-        function renderAttachPreview() {
-            attachPreviewEl.innerHTML = '';
-            const hasItems = pendingImages.length > 0 || pendingFiles.length > 0;
-            attachPreviewEl.classList.toggle('show', hasItems);
+    let displayText = text, messageText = text;
+    if (pendingFiles.length > 0) {
+        const ft = pendingFiles.map(f => '--- ' + f.name + ' ---\n' + f.content);
+        messageText = (text ? text + '\n\n' : '') + ft.join('\n\n');
+        if (!displayText) displayText = '📄 ' + pendingFiles.map(f => f.name).join(', ');
+    }
 
-            pendingImages.forEach((img, i) => {
-                const thumb = document.createElement('div');
-                thumb.className = 'attach-thumb';
-                thumb.innerHTML = '<img src="' + img.preview + '"><button class="remove" onclick="removeImage(' + i + ')">✕</button>';
-                attachPreviewEl.appendChild(thumb);
-            });
+    const imgPreviews = pendingImages.map(i => i.preview);
+    addMessage('user', displayText, imgPreviews, Date.now() / 1000);
 
-            pendingFiles.forEach((f, i) => {
-                const tag = document.createElement('div');
-                tag.className = 'attach-file-tag';
-                tag.innerHTML = '📄 ' + escapeHtml(f.name) + ' <button class="remove" onclick="removeFile(' + i + ')">✕</button>';
-                attachPreviewEl.appendChild(tag);
-            });
-        }
+    const body = {
+        message: messageText, session_id: currentSessionId,
+        thinking: thinkingEnabled,
+        images: pendingImages.map(i => ({data: i.data, media_type: i.media_type})),
+    };
+    pendingImages = []; pendingFiles = []; renderAttachPreview();
 
-        function removeImage(i) { pendingImages.splice(i, 1); renderAttachPreview(); }
-        function removeFile(i) { pendingFiles.splice(i, 1); renderAttachPreview(); }
+    showStatus('正在思考...');
 
-        // ── 消息显示 ──
-        function clearMessages() {
-            messagesEl.innerHTML = '<div class="welcome" id="welcome">说点什么吧</div>';
-        }
-
-        function addMessage(role, text, imagePreviews) {
-            const w = document.getElementById('welcome');
-            if (w) w.remove();
-
-            const div = document.createElement('div');
-            div.className = 'msg ' + role;
-
-            // 如果有图片预览
-            if (imagePreviews && imagePreviews.length > 0) {
-                const imgDiv = document.createElement('div');
-                imgDiv.className = 'msg-images';
-                imagePreviews.forEach(src => {
-                    const img = document.createElement('img');
-                    img.src = src;
-                    imgDiv.appendChild(img);
-                });
-                div.appendChild(imgDiv);
-            }
-
-            if (text) {
-                const textSpan = document.createElement('span');
-                textSpan.innerHTML = renderText(text);
-                div.appendChild(textSpan);
-            }
-
-            messagesEl.appendChild(div);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-
-        function addAssistantMessage(reply, toolCalls, thinking) {
-            const w = document.getElementById('welcome');
-            if (w) w.remove();
-
-            const div = document.createElement('div');
-            div.className = 'msg assistant';
-
-            if (toolCalls && toolCalls.length > 0) {
-                const toolDiv = document.createElement('div');
-                toolDiv.className = 'tool-info';
-                toolCalls.forEach(tc => {
-                    const tag = document.createElement('span');
-                    tag.className = 'tool-tag';
-                    tag.textContent = '⚙ ' + tc.name;
-                    const detail = document.createElement('div');
-                    detail.className = 'tool-detail';
-                    let d = '输入: ' + JSON.stringify(tc.input, null, 2);
-                    if (tc.result_preview) d += '\n\n结果: ' + tc.result_preview;
-                    detail.textContent = d;
-                    tag.onclick = () => detail.classList.toggle('show');
-                    toolDiv.appendChild(tag);
-                    toolDiv.appendChild(detail);
-                });
-                div.appendChild(toolDiv);
-            }
-
-            if (thinking) {
-                const thinkDiv = document.createElement('div');
-                thinkDiv.className = 'thinking-section';
-                const btn = document.createElement('div');
-                btn.className = 'thinking-toggle-btn';
-                btn.textContent = '▶ 思考过程';
-                const content = document.createElement('div');
-                content.className = 'thinking-content';
-                content.textContent = thinking;
-                btn.onclick = () => {
-                    const on = content.classList.toggle('show');
-                    btn.textContent = on ? '▼ 思考过程' : '▶ 思考过程';
-                };
-                thinkDiv.appendChild(btn);
-                thinkDiv.appendChild(content);
-                div.appendChild(thinkDiv);
-            }
-
-            const textDiv = document.createElement('span');
-            textDiv.innerHTML = renderText(reply);
-            div.appendChild(textDiv);
-
-            messagesEl.appendChild(div);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-
-        // ── 输入处理 ──
-        inputEl.addEventListener('input', () => {
-            inputEl.style.height = 'auto';
-            inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
         });
 
-        inputEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '', reply = '', thinkingContent = null, toolCalls = null, replyTime = null, tokens = null;
 
-        async function sendMessage() {
-            const text = inputEl.value.trim();
-            const hasAttachments = pendingImages.length > 0 || pendingFiles.length > 0;
-            if (!text && !hasAttachments) return;
-
-            inputEl.value = '';
-            inputEl.style.height = 'auto';
-            sendBtn.disabled = true;
-
-            // 构建显示文本（附带文件内容）
-            let displayText = text;
-            let messageText = text;
-
-            if (pendingFiles.length > 0) {
-                const fileTexts = pendingFiles.map(f => '--- ' + f.name + ' ---\n' + f.content);
-                messageText = (text ? text + '\n\n' : '') + fileTexts.join('\n\n');
-                if (!displayText) displayText = '📄 ' + pendingFiles.map(f => f.name).join(', ');
-            }
-
-            // 显示用户消息
-            const imgPreviews = pendingImages.map(img => img.preview);
-            addMessage('user', displayText, imgPreviews);
-
-            typingEl.classList.add('show');
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-
-            // 构建请求
-            const body = {
-                message: messageText,
-                session_id: currentSessionId,
-                thinking: thinkingEnabled,
-                images: pendingImages.map(img => ({data: img.data, media_type: img.media_type})),
-            };
-
-            // 清空附件
-            pendingImages = [];
-            pendingFiles = [];
-            renderAttachPreview();
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body),
-                });
-                const data = await res.json();
-                typingEl.classList.remove('show');
-                addAssistantMessage(data.reply, data.tool_calls, data.thinking);
-                refreshSessions();
-            } catch (err) {
-                typingEl.classList.remove('show');
-                addMessage('assistant', '连接断了...再试一次？');
-            }
-
-            sendBtn.disabled = false;
-            inputEl.focus();
-        }
-
-        // ── 初始化 ──
-        async function init() {
-            loadProfile();
-            try {
-                const res = await fetch('/api/sessions');
-                const data = await res.json();
-                if (data.sessions.length === 0) {
-                    await newChat();
-                } else {
-                    sessionsList = data.sessions;
-                    currentSessionId = data.sessions[0].id;
-                    renderSessionList();
-                    await loadSession(currentSessionId);
-                }
-            } catch (e) {
-                currentSessionId = 'default';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, {stream: true});
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop();
+            for (const part of parts) {
+                if (!part.startsWith('data: ')) continue;
+                try {
+                    const data = JSON.parse(part.slice(6));
+                    switch (data.type) {
+                        case 'status': showStatus(data.text); break;
+                        case 'tools': toolCalls = data.calls; break;
+                        case 'thinking': thinkingContent = data.content; break;
+                        case 'reply': reply = data.content; replyTime = data.time; break;
+                        case 'done': tokens = data.tokens; break;
+                    }
+                } catch(e) {}
             }
         }
 
-        init();
-    </script>
+        hideStatus();
+        buildAssistantBubble(reply, toolCalls, thinkingContent, replyTime, tokens);
+        refreshSessions();
+    } catch (err) {
+        hideStatus();
+        addMessage('assistant', '连接断了...再试一次？');
+    }
+
+    sendBtn.disabled = false; inputEl.focus();
+}
+
+// ── 初始化 ──
+async function init() {
+    loadProfile();
+    try {
+        const r = await fetch('/api/sessions');
+        const data = await r.json();
+        if (data.sessions.length === 0) { await newChat(); }
+        else { sessionsList = data.sessions; currentSessionId = data.sessions[0].id; renderSessionList(); await loadSession(currentSessionId); }
+    } catch(e) { currentSessionId = 'default'; }
+}
+init();
+</script>
 </body>
 </html>
