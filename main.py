@@ -342,6 +342,16 @@ async def list_bookmarks(book_id:str):
 async def delete_bookmark(bid:int):
     c=get_db(); c.execute("DELETE FROM reading_bookmarks WHERE id=?",(bid,)); c.commit(); c.close(); return {"ok":True}
 
+class FavoriteRequest(BaseModel):
+    comment:str;context:str="";book_title:str=""
+
+@app.post("/api/reading/favorite")
+async def favorite_comment(req:FavoriteRequest):
+    memory=f"读《{req.book_title}》时的感想：{req.comment}"
+    if req.context: memory=f"读《{req.book_title}》时，关于「{req.context[:100]}」的感想：{req.comment}"
+    try: await call_ombre("hold",{"content":memory}); return {"ok":True}
+    except Exception as e: return {"ok":False,"error":str(e)}
+
 @app.get("/api/reading/comments/{bid}")
 async def get_reading_comments(bid:str):
     c=get_db(); rows=c.execute("SELECT comment,page_text,created_at FROM reading_comments WHERE book_id=? ORDER BY created_at DESC LIMIT 50",(bid,)).fetchall(); c.close()
