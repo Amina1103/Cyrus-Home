@@ -37,6 +37,7 @@ LOCAL_TOOLS = [
     {"name":"github_read","description":"读取GitHub仓库","input_schema":{"type":"object","properties":{"owner":{"type":"string","description":"所有者"},"repo":{"type":"string","description":"仓库名"},"path":{"type":"string","description":"路径","default":""}},"required":["owner","repo"]}},
 ]
 ombre_tools = []
+reading_contexts = {}
 
 def get_db():
     conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row; conn.execute("PRAGMA journal_mode=WAL"); return conn
@@ -282,11 +283,29 @@ class ProgressRequest(BaseModel):
 class BookmarkRequest(BaseModel):
     book_id:str; cfi:str; label:str=""
 
+def build_reading_prompt(book_id):
+    p=READING_SYSTEM_PROMPT;ctx=reading_contexts.get(book_id,{})
+    if ctx.get('profile'): p+=f"\n\n关于 Amina：\n{ctx['profile']}"
+    if ctx.get('memory'): p+=f"\n\n你们关于这本书的相关记忆：\n{ctx['memory']}"
+    return p
+
+class ReadingInitRequest(BaseModel):
+    book_id:str
+
+@app.post("/api/reading/init")
+async def init_reading(req:ReadingInitRequest):
+    c=get_db();b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone();c.close()
+    t=b["title"] if b else "";profile=db_get_profile();memory=""
+    try: memory=await call_ombre("breath",{"query":t})
+    except: pass
+    reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t}
+    return {"ok":True,"has_memory":bool(memory)}
+
 @app.post("/api/reading/comment")
 async def reading_comment(req:CommentRequest):
     c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
     t=b["title"] if b else "书"; allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
-    resp=client.messages.create(model=model,max_tokens=200,system=READING_SYSTEM_PROMPT,messages=[{"role":"user","content":f"我正在读《{t}》，当前页：\n\n{req.page_text[:1000]}"}])
+    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_prompt(req.book_id),messages=[{"role":"user","content":f"我正在读《{t}》，当前页：\n\n{req.page_text[:1000]}"}])
     cm=resp.content[0].text; c=get_db()
     c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
@@ -297,7 +316,7 @@ async def reading_highlight(req:HighlightRequest):
     t=b["title"] if b else "书"; msg=f"我正在读《{t}》，选中了这段：\n\n「{req.selected_text}」"
     if req.user_message: msg+=f"\n\n我的想法：{req.user_message}"
     allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
-    resp=client.messages.create(model=model,max_tokens=300,system=READING_SYSTEM_PROMPT,messages=[{"role":"user","content":msg}])
+    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_prompt(req.book_id),messages=[{"role":"user","content":msg}])
     cm=resp.content[0].text; c=get_db()
     c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
