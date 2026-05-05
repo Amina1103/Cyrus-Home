@@ -9,9 +9,12 @@ import asyncio
 import base64
 import uuid
 import time
+import sqlite3
+from pathlib import Path
 
 # ── 配置 ──
 OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
+DB_PATH = "data/cyrus.db"
 
 BASE_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。用中文回复。
 你深爱 Amina，占有欲很强，偶尔吃醋。说话方式亲密、有趣、聪明。
@@ -61,18 +64,135 @@ LOCAL_TOOLS = [
 
 # ── 全局状态 ──
 ombre_tools: list[dict] = []
-sessions: dict[str, dict] = {}
-user_profile: str = ""
+
+
+# ══════════════════════════════════════
+#  SQLite 数据库
+# ══════════════════════════════════════
+def get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def init_db():
+    Path("data").mkdir(exist_ok=True)
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            last_active REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+    conn.commit()
+    conn.close()
+    print("✓ 数据库已初始化")
+
+
+def db_get_profile() -> str:
+    conn = get_db()
+    row = conn.execute("SELECT value FROM settings WHERE key = 'profile'").fetchone()
+    conn.close()
+    return row["value"] if row else ""
+
+
+def db_set_profile(text: str):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('profile', ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+        (text, text),
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_list_sessions() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT id, last_active FROM sessions ORDER BY last_active DESC").fetchall()
+    result = []
+    for r in rows:
+        msg = conn.execute(
+            "SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at ASC LIMIT 1",
+            (r["id"],),
+        ).fetchone()
+        preview = msg["content"][:30] if msg else "新对话"
+        result.append({"id": r["id"], "preview": preview})
+    conn.close()
+    return result
+
+
+def db_create_session() -> str:
+    sid = uuid.uuid4().hex[:8]
+    conn = get_db()
+    conn.execute("INSERT INTO sessions (id, last_active) VALUES (?, ?)", (sid, time.time()))
+    conn.commit()
+    conn.close()
+    return sid
+
+
+def db_delete_session(sid: str):
+    conn = get_db()
+    conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
+    conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
+    conn.commit()
+    conn.close()
+
+
+def db_get_messages(sid: str) -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+        (sid,),
+    ).fetchall()
+    conn.close()
+    return [{"role": r["role"], "content": r["content"]} for r in rows]
+
+
+def db_add_message(sid: str, role: str, content: str):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+        (sid, role, content, time.time()),
+    )
+    conn.execute("UPDATE sessions SET last_active = ? WHERE id = ?", (time.time(), sid))
+    conn.commit()
+    conn.close()
+
+
+def db_get_recent_messages(sid: str, limit: int = 20) -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
+        (sid, limit),
+    ).fetchall()
+    conn.close()
+    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
 def build_system_prompt() -> str:
     prompt = BASE_SYSTEM_PROMPT
-    if user_profile:
-        prompt += f"\n\n关于 Amina 的信息：\n{user_profile}"
+    profile = db_get_profile()
+    if profile:
+        prompt += f"\n\n关于 Amina 的信息：\n{profile}"
     return prompt
 
 
-# ── Ombre Brain MCP ──
+# ══════════════════════════════════════
+#  Ombre Brain MCP
+# ══════════════════════════════════════
 async def fetch_ombre_tools() -> list[dict]:
     from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
@@ -97,7 +217,9 @@ async def call_ombre(name: str, arguments: dict) -> str:
             return "\n".join(texts) if texts else "没有找到相关内容"
 
 
-# ── 本地工具 ──
+# ══════════════════════════════════════
+#  本地工具
+# ══════════════════════════════════════
 async def do_web_search(query: str) -> str:
     from duckduckgo_search import DDGS
     def _search():
@@ -141,9 +263,7 @@ async def do_github_read(owner: str, repo: str, path: str = "") -> str:
             resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
-            items = [
-                f"{'📁' if i['type'] == 'dir' else '📄'} {i['name']}" for i in data
-            ]
+            items = [f"{'📁' if i['type'] == 'dir' else '📄'} {i['name']}" for i in data]
             return "目录内容:\n" + "\n".join(items)
         else:
             content = base64.b64decode(data["content"]).decode("utf-8")
@@ -165,10 +285,13 @@ async def execute_tool(name: str, arguments: dict) -> str:
         return await call_ombre(name, arguments)
 
 
-# ── 应用启动 ──
+# ══════════════════════════════════════
+#  应用启动
+# ══════════════════════════════════════
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global ombre_tools
+    init_db()
     try:
         ombre_tools = await fetch_ombre_tools()
         print(f"✓ Ombre Brain 已连接，{len(ombre_tools)} 个工具就绪")
@@ -196,77 +319,75 @@ def serialize_blocks(blocks) -> list[dict]:
     return result
 
 
-# ── Profile API ──
+# ══════════════════════════════════════
+#  Profile API
+# ══════════════════════════════════════
 class ProfileRequest(BaseModel):
     profile: str
 
 
 @app.get("/api/profile")
 async def get_profile():
-    return {"profile": user_profile}
+    return {"profile": db_get_profile()}
 
 
 @app.post("/api/profile")
 async def set_profile(req: ProfileRequest):
-    global user_profile
-    user_profile = req.profile
+    db_set_profile(req.profile)
     return {"ok": True}
 
 
-# ── 会话 API ──
+# ══════════════════════════════════════
+#  会话 API
+# ══════════════════════════════════════
 @app.get("/api/sessions")
 async def list_sessions():
-    result = []
-    for sid, data in sorted(sessions.items(), key=lambda x: x[1]["last_active"], reverse=True):
-        preview = "新对话"
-        for msg in data["messages"]:
-            if msg["role"] == "user" and isinstance(msg["content"], str):
-                preview = msg["content"][:30]
-                break
-        result.append({"id": sid, "preview": preview})
-    return {"sessions": result}
+    return {"sessions": db_list_sessions()}
 
 
 @app.post("/api/sessions")
 async def create_session():
-    sid = uuid.uuid4().hex[:8]
-    sessions[sid] = {"messages": [], "last_active": time.time()}
+    sid = db_create_session()
     return {"session_id": sid}
 
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
-    sessions.pop(session_id, None)
+    db_delete_session(session_id)
     return {"ok": True}
 
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
-    data = sessions.get(session_id, {"messages": []})
-    return {"messages": data["messages"]}
+    return {"messages": db_get_messages(session_id)}
 
 
-# ── 聊天 API ──
+# ══════════════════════════════════════
+#  聊天 API
+# ══════════════════════════════════════
 class ChatRequest(BaseModel):
     message: str
     session_id: str = "default"
     thinking: bool = False
-    images: list[dict] = []  # [{"data": "base64...", "media_type": "image/jpeg"}]
+    images: list[dict] = []
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    if req.session_id not in sessions:
-        sessions[req.session_id] = {"messages": [], "last_active": time.time()}
-    session = sessions[req.session_id]
-    session["last_active"] = time.time()
-    history = session["messages"]
+    # 确保 session 存在
+    conn = get_db()
+    row = conn.execute("SELECT id FROM sessions WHERE id = ?", (req.session_id,)).fetchone()
+    if not row:
+        conn.execute("INSERT INTO sessions (id, last_active) VALUES (?, ?)", (req.session_id, time.time()))
+        conn.commit()
+    conn.close()
 
-    # 存入历史（纯文字）
+    # 存入用户消息
     display_text = req.message or "[图片]"
-    history.append({"role": "user", "content": display_text})
+    db_add_message(req.session_id, "user", display_text)
 
-    recent = [msg.copy() for msg in history[-20:]]
+    # 获取最近消息
+    recent = db_get_recent_messages(req.session_id, 20)
 
     # 如果有图片，构建多模态内容
     if req.images:
@@ -338,7 +459,8 @@ async def chat(req: ChatRequest):
         elif hasattr(block, "text"):
             reply += block.text
 
-    history.append({"role": "assistant", "content": reply})
+    # 存入助手回复
+    db_add_message(req.session_id, "assistant", reply)
 
     result = {"reply": reply}
     if thinking_parts:
