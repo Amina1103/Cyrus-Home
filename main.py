@@ -1,12 +1,15 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import anthropic
+from openai import OpenAI
 import os
 
 app = FastAPI()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
 
 # Phase 1: 最简系统提示，后续再加完整人设
 SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。用中文回复。
@@ -28,14 +31,15 @@ async def chat(req: ChatRequest):
     # 只保留最近 20 条，防止 token 爆炸
     recent = conversation_history[-20:]
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + recent
+
+    response = client.chat.completions.create(
+        model="anthropic/claude-sonnet-4",
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=recent,
+        messages=messages,
     )
 
-    assistant_message = response.content[0].text
+    assistant_message = response.choices[0].message.content
     conversation_history.append({"role": "assistant", "content": assistant_message})
 
     return {"reply": assistant_message}
