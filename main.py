@@ -38,7 +38,9 @@ LOCAL_TOOLS = [
 ]
 ombre_tools = []
 reading_contexts = {}
+reading_conversations = {}
 
+# ══ DB ══
 def get_db():
     conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row; conn.execute("PRAGMA journal_mode=WAL"); return conn
 
@@ -85,12 +87,19 @@ def db_get_recent_messages(sid,limit=20):
 def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
+
 def build_system_prompt(sid=None):
     p=BASE_SYSTEM_PROMPT; pr=db_get_profile()
     if pr: p+=f"\n\n关于 Amina 的信息：\n{pr}"
     if sid:
         s=db_get_session_summary(sid)
         if s: p+=f"\n\n之前的对话摘要：\n{s}"
+    return p
+
+def build_reading_prompt(book_id):
+    p=READING_SYSTEM_PROMPT; ctx=reading_contexts.get(book_id,{})
+    if ctx.get('profile'): p+=f"\n\n关于 Amina：\n{ctx['profile']}"
+    if ctx.get('memory'): p+=f"\n\n你们关于这本书的相关记忆：\n{ctx['memory']}"
     return p
 
 def get_epub_title(fp):
@@ -103,6 +112,7 @@ def get_epub_title(fp):
     except: pass
     return ""
 
+# ══ Summary ══
 async def maybe_generate_summary(sid):
     try:
         c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
@@ -118,21 +128,25 @@ async def maybe_generate_summary(sid):
         c=get_db(); c.execute("UPDATE sessions SET summary=?,summary_until=? WHERE id=?",(r.content[0].text,lid,sid)); c.commit(); c.close()
     except Exception as e: print(f"⚠ 摘要失败: {e}")
 
+# ══ Ombre Brain ══
 async def fetch_ombre_tools():
     from mcp.client.streamable_http import streamablehttp_client; from mcp import ClientSession
     async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
         async with ClientSession(r,w) as s: await s.initialize(); result=await s.list_tools(); return [{"name":t.name,"description":t.description or "","input_schema":t.inputSchema} for t in result.tools]
+
 async def call_ombre(name,arguments):
     from mcp.client.streamable_http import streamablehttp_client; from mcp import ClientSession
     async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
         async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; return "\n".join(texts) if texts else "没有找到"
 
+# ══ Local Tools ══
 async def do_web_search(q):
     from duckduckgo_search import DDGS
     def _s():
         with DDGS() as d: return list(d.text(q,max_results=5))
     try: r=await asyncio.to_thread(_s); return "\n\n".join(f"标题: {x['title']}\n摘要: {x['body']}\n链接: {x['href']}" for x in r) if r else "没有找到"
     except Exception as e: return f"搜索失败: {e}"
+
 async def do_web_fetch(url):
     from bs4 import BeautifulSoup
     try:
@@ -141,6 +155,7 @@ async def do_web_fetch(url):
         for t in s(["script","style","nav","header","footer"]): t.decompose()
         t=s.get_text(separator="\n",strip=True); return t[:3000]+"\n..." if len(t)>3000 else (t or "空")
     except Exception as e: return f"抓取失败: {e}"
+
 async def do_github_read(owner,repo,path=""):
     url=f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"; h={"Accept":"application/vnd.github.v3+json","User-Agent":"CH"}
     tk=os.getenv("GITHUB_TOKEN")
@@ -151,12 +166,14 @@ async def do_github_read(owner,repo,path=""):
         if isinstance(d,list): return "目录:\n"+"\n".join(f"{'📁' if i['type']=='dir' else '📄'} {i['name']}" for i in d)
         ct=base64.b64decode(d["content"]).decode("utf-8"); return ct[:3000]+"\n..." if len(ct)>3000 else ct
     except Exception as e: return f"GitHub失败: {e}"
+
 async def execute_tool(name,args):
     if name=="web_search": return await do_web_search(args.get("query",""))
     elif name=="web_fetch": return await do_web_fetch(args.get("url",""))
     elif name=="github_read": return await do_github_read(args.get("owner",""),args.get("repo",""),args.get("path",""))
     else: return await call_ombre(name,args)
 
+# ══ App ══
 @asynccontextmanager
 async def lifespan(app):
     global ombre_tools; init_db()
@@ -177,8 +194,10 @@ def serialize_blocks(blocks):
             if hasattr(b,"signature") and b.signature: d["signature"]=b.signature
             r.append(d)
     return r
+
 def sse(data): return f"data: {json.dumps(data,ensure_ascii=False)}\n\n"
 
+# ══ Profile & Sessions ══
 class ProfileRequest(BaseModel):
     profile: str
 @app.get("/api/profile")
@@ -197,10 +216,13 @@ async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 async def export_session(sid:str):
     return JSONResponse(content={"session_id":sid,"exported_at":time.time(),"messages":db_get_messages(sid)},headers={"Content-Disposition":f"attachment; filename=cyrus-chat-{sid}.json"})
 
+# ══ Chat (SSE) ══
 class ChatRequest(BaseModel):
     message:str; session_id:str="default"; thinking:bool=False; images:list[dict]=[]; model:str="claude-sonnet-4-6"
+
 @app.post("/api/chat")
 async def chat(req:ChatRequest): return StreamingResponse(chat_stream(req),media_type="text/event-stream")
+
 async def chat_stream(req):
     c=get_db()
     if not c.execute("SELECT id FROM sessions WHERE id=?",(req.session_id,)).fetchone():
@@ -246,7 +268,7 @@ async def chat_stream(req):
     try: await maybe_generate_summary(req.session_id)
     except: pass
 
-# Books
+# ══ Books ══
 @app.post("/api/books/upload")
 async def upload_book(file:UploadFile=File(...)):
     if not file.filename.lower().endswith('.epub'): return JSONResponse({"error":"只支持epub"},400)
@@ -255,10 +277,12 @@ async def upload_book(file:UploadFile=File(...)):
     title=get_epub_title(fp) or file.filename.replace('.epub','')
     c=get_db(); c.execute("INSERT INTO books(id,title,file_path,created_at) VALUES(?,?,?,?)",(bid,title,fp,time.time())); c.commit(); c.close()
     return {"id":bid,"title":title}
+
 @app.get("/api/books")
 async def list_books():
     c=get_db(); rows=c.execute("SELECT id,title,created_at FROM books ORDER BY created_at DESC").fetchall(); c.close()
     return {"books":[{"id":r["id"],"title":r["title"],"time":r["created_at"]} for r in rows]}
+
 @app.delete("/api/books/{bid}")
 async def delete_book(bid:str):
     c=get_db(); b=c.execute("SELECT file_path FROM books WHERE id=?",(bid,)).fetchone()
@@ -267,13 +291,14 @@ async def delete_book(bid:str):
         except: pass
     c.execute("DELETE FROM reading_comments WHERE book_id=?",(bid,)); c.execute("DELETE FROM reading_progress WHERE book_id=?",(bid,))
     c.execute("DELETE FROM reading_bookmarks WHERE book_id=?",(bid,)); c.execute("DELETE FROM books WHERE id=?",(bid,)); c.commit(); c.close(); return {"ok":True}
+
 @app.get("/api/books/{bid}/file")
 async def get_book_file(bid:str):
     c=get_db(); b=c.execute("SELECT file_path FROM books WHERE id=?",(bid,)).fetchone(); c.close()
     if not b: return JSONResponse({"error":"not found"},404)
     return FileResponse(b["file_path"],media_type="application/epub+zip")
 
-# Reading
+# ══ Reading ══
 class CommentRequest(BaseModel):
     book_id:str; page_text:str; model:str="claude-sonnet-4-6"
 class HighlightRequest(BaseModel):
@@ -282,48 +307,53 @@ class ProgressRequest(BaseModel):
     book_id:str; cfi:str; page:int=0
 class BookmarkRequest(BaseModel):
     book_id:str; cfi:str; label:str=""
-
-def build_reading_prompt(book_id):
-    p=READING_SYSTEM_PROMPT;ctx=reading_contexts.get(book_id,{})
-    if ctx.get('profile'): p+=f"\n\n关于 Amina：\n{ctx['profile']}"
-    if ctx.get('memory'): p+=f"\n\n你们关于这本书的相关记忆：\n{ctx['memory']}"
-    return p
-
 class ReadingInitRequest(BaseModel):
     book_id:str
+class FavoriteRequest(BaseModel):
+    comment:str; context:str=""; book_title:str=""
 
 @app.post("/api/reading/init")
 async def init_reading(req:ReadingInitRequest):
-    c=get_db();b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone();c.close()
-    t=b["title"] if b else "";profile=db_get_profile();memory=""
+    c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
+    t=b["title"] if b else ""; profile=db_get_profile(); memory=""
     try: memory=await call_ombre("breath",{"query":t})
     except: pass
     reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t}
+    reading_conversations[req.book_id]=[]
     return {"ok":True,"has_memory":bool(memory)}
 
 @app.post("/api/reading/comment")
 async def reading_comment(req:CommentRequest):
     c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
     t=b["title"] if b else "书"; allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
-    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_prompt(req.book_id),messages=[{"role":"user","content":f"我正在读《{t}》，当前页：\n\n{req.page_text[:1000]}"}])
-    cm=resp.content[0].text; c=get_db()
-    c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
+    if req.book_id not in reading_conversations: reading_conversations[req.book_id]=[]
+    conv=reading_conversations[req.book_id]
+    conv.append({"role":"user","content":f"[当前页内容]\n{req.page_text[:1000]}"})
+    recent=conv[-20:]
+    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_prompt(req.book_id),messages=recent)
+    cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
+    c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
 
 @app.post("/api/reading/highlight")
 async def reading_highlight(req:HighlightRequest):
     c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
-    t=b["title"] if b else "书"; msg=f"我正在读《{t}》，选中了这段：\n\n「{req.selected_text}」"
+    t=b["title"] if b else "书"; msg=f"选中了这段：\n\n「{req.selected_text}」"
     if req.user_message: msg+=f"\n\n我的想法：{req.user_message}"
     allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
-    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_prompt(req.book_id),messages=[{"role":"user","content":msg}])
-    cm=resp.content[0].text; c=get_db()
-    c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
+    if req.book_id not in reading_conversations: reading_conversations[req.book_id]=[]
+    conv=reading_conversations[req.book_id]
+    conv.append({"role":"user","content":msg})
+    recent=conv[-20:]
+    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_prompt(req.book_id),messages=recent)
+    cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
+    c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
 
 @app.post("/api/reading/progress")
 async def save_progress(req:ProgressRequest):
     c=get_db(); c.execute("INSERT INTO reading_progress(book_id,current_cfi,current_page,updated_at) VALUES(?,?,?,?) ON CONFLICT(book_id) DO UPDATE SET current_cfi=?,current_page=?,updated_at=?",(req.book_id,req.cfi,req.page,time.time(),req.cfi,req.page,time.time())); c.commit(); c.close(); return {"ok":True}
+
 @app.get("/api/reading/progress/{bid}")
 async def get_progress(bid:str):
     c=get_db(); r=c.execute("SELECT current_cfi,current_page FROM reading_progress WHERE book_id=?",(bid,)).fetchone(); c.close()
@@ -334,16 +364,15 @@ async def add_bookmark(req:BookmarkRequest):
     c=get_db(); c.execute("INSERT INTO reading_bookmarks(book_id,cfi,label,created_at) VALUES(?,?,?,?)",(req.book_id,req.cfi,req.label,time.time())); c.commit()
     bid=c.execute("SELECT last_insert_rowid()").fetchone()[0]; c.close()
     return {"ok":True,"id":bid}
+
 @app.get("/api/reading/bookmarks/{book_id}")
 async def list_bookmarks(book_id:str):
     c=get_db(); rows=c.execute("SELECT id,cfi,label,created_at FROM reading_bookmarks WHERE book_id=? ORDER BY created_at DESC",(book_id,)).fetchall(); c.close()
     return {"bookmarks":[{"id":r["id"],"cfi":r["cfi"],"label":r["label"],"time":r["created_at"]} for r in rows]}
+
 @app.delete("/api/reading/bookmarks/{bid}")
 async def delete_bookmark(bid:int):
     c=get_db(); c.execute("DELETE FROM reading_bookmarks WHERE id=?",(bid,)); c.commit(); c.close(); return {"ok":True}
-
-class FavoriteRequest(BaseModel):
-    comment:str;context:str="";book_title:str=""
 
 @app.post("/api/reading/favorite")
 async def favorite_comment(req:FavoriteRequest):
@@ -351,6 +380,10 @@ async def favorite_comment(req:FavoriteRequest):
     if req.context: memory=f"读《{req.book_title}》时，关于「{req.context[:100]}」的感想：{req.comment}"
     try: await call_ombre("hold",{"content":memory}); return {"ok":True}
     except Exception as e: return {"ok":False,"error":str(e)}
+
+@app.post("/api/reading/close")
+async def close_reading(req:ReadingInitRequest):
+    reading_conversations.pop(req.book_id,None); reading_contexts.pop(req.book_id,None); return {"ok":True}
 
 @app.get("/api/reading/comments/{bid}")
 async def get_reading_comments(bid:str):
