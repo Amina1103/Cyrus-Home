@@ -387,6 +387,36 @@ async def favorite_whisper(wid: int):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.post("/api/whispers/ai-initiate")
+async def ai_initiate_whisper():
+    import random
+    c = get_db()
+    pending = c.execute("SELECT id FROM whispers WHERE initiator='ai' AND status='pending'").fetchone()
+    if pending: c.close(); return {"initiated": False, "reason": "has_pending"}
+    last = c.execute("SELECT created_at FROM whispers ORDER BY created_at DESC LIMIT 1").fetchone()
+    c.close()
+    if last and time.time() - last["created_at"] < 7200: return {"initiated": False, "reason": "too_soon"}
+    if random.random() > 0.3: return {"initiated": False, "reason": "not_this_time"}
+    try:
+        memory = ""
+        try: memory = await call_ombre("breath", {"query": "最近的感受 想念"})
+        except: pass
+        sys_prompt = build_whisper_prompt()
+        if memory: sys_prompt += f"\n\n相关记忆：\n{memory}"
+        sys_prompt += "\n\n现在你想主动给 Amina 写一张小纸条。写你此刻真实的感受，不要解释为什么写。"
+        resp = client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=150,
+            system=sys_prompt,
+            messages=[{"role": "user", "content": "写一张纸条给 Amina"}]
+        )
+        content = resp.content[0].text
+        c = get_db()
+        c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", time.time()))
+        c.commit(); c.close()
+        return {"initiated": True}
+    except Exception as e:
+        return {"initiated": False, "error": str(e)}
+
 # ══ Books ══
 @app.post("/api/books/upload")
 async def upload_book(file:UploadFile=File(...)):
