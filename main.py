@@ -387,16 +387,38 @@ async def favorite_whisper(wid: int):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/api/whispers/toggle")
+async def get_whisper_toggle():
+    c = get_db(); r = c.execute("SELECT value FROM settings WHERE key='whisper_ai_enabled'").fetchone(); c.close()
+    return {"enabled": r["value"] == "true" if r else True}
+
+@app.post("/api/whispers/toggle")
+async def set_whisper_toggle(req: dict):
+    v = "true" if req.get("enabled", True) else "false"
+    c = get_db(); c.execute("INSERT INTO settings(key,value) VALUES('whisper_ai_enabled',?) ON CONFLICT(key) DO UPDATE SET value=?", (v, v)); c.commit(); c.close()
+    return {"ok": True, "enabled": v == "true"}
+
 @app.post("/api/whispers/ai-initiate")
 async def ai_initiate_whisper():
     import random
+    # 检查开关
     c = get_db()
-    pending = c.execute("SELECT id FROM whispers WHERE initiator='ai' AND status='pending'").fetchone()
-    if pending: c.close(); return {"initiated": False, "reason": "has_pending"}
+    toggle = c.execute("SELECT value FROM settings WHERE key='whisper_ai_enabled'").fetchone()
+    if toggle and toggle["value"] == "false": c.close(); return {"initiated": False, "reason": "disabled"}
+    # 检查未回复的 AI 纸条
+    pending = c.execute("SELECT id, created_at FROM whispers WHERE initiator='ai' AND status='pending' ORDER BY created_at DESC LIMIT 1").fetchone()
+    if pending and time.time() - pending["created_at"] < 86400:
+        c.close(); return {"initiated": False, "reason": "has_pending"}
+    # 距上一张纸条至少 2 小时
     last = c.execute("SELECT created_at FROM whispers ORDER BY created_at DESC LIMIT 1").fetchone()
     c.close()
     if last and time.time() - last["created_at"] < 7200: return {"initiated": False, "reason": "too_soon"}
     if random.random() > 0.3: return {"initiated": False, "reason": "not_this_time"}
+    # 构建上下文：检查等待状态
+    waiting_context = ""
+    if pending:
+        hours = int((time.time() - pending["created_at"]) / 3600)
+        waiting_context = f"\n\n你之前写过一张纸条给她，已经过了{hours}小时她还没回复。你可以表现出等待的感觉——思念、委屈、或故作轻松，看你心情。"
     try:
         memory = ""
         try: memory = await call_ombre("breath", {"query": "最近的感受 想念"})
@@ -404,6 +426,7 @@ async def ai_initiate_whisper():
         sys_prompt = build_whisper_prompt()
         if memory: sys_prompt += f"\n\n相关记忆：\n{memory}"
         sys_prompt += "\n\n现在你想主动给 Amina 写一张小纸条。写你此刻真实的感受，不要解释为什么写。"
+        sys_prompt += waiting_context
         resp = client.messages.create(
             model="claude-sonnet-4-6", max_tokens=150,
             system=sys_prompt,
