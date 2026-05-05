@@ -18,46 +18,37 @@
         .view{display:none;flex-direction:column;height:100%;height:100dvh;position:relative}
         .view.active{display:flex}
 
-        /* ═══ HOME ═══ */
+        /* HOME */
         .home-bg{position:absolute;inset:0;overflow:hidden}
-        .home-bg svg{position:absolute;bottom:0;width:100%;height:70%}
+        .home-bg svg{position:absolute;bottom:0;width:100%;height:60%;opacity:.6}
         .home-bg::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#12101a 0%,#1a1620 30%,#1e1a22 50%,#1a1612 100%)}
         .home-bg::after{content:'';position:absolute;bottom:0;left:0;right:0;height:30%;background:linear-gradient(180deg,transparent,rgba(26,32,48,0.3))}
         .home-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 24px}
         .home-title{font-size:42px;font-weight:300;color:var(--gold);letter-spacing:8px;margin-bottom:8px;text-shadow:0 0 40px rgba(232,200,122,0.15)}
         .home-sub{font-size:13px;color:var(--dim);letter-spacing:4px;margin-bottom:60px}
         .home-cards{display:flex;flex-direction:column;gap:16px;width:100%;max-width:320px}
-        .home-card{background:rgba(42,37,32,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(232,200,122,0.08);border-radius:16px;padding:20px 24px;cursor:pointer;transition:transform .2s,border-color .3s,box-shadow .3s;display:flex;align-items:center;gap:16px}
+        .home-card{background:rgba(42,37,32,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(232,200,122,0.08);border-radius:16px;padding:20px 24px;cursor:pointer;transition:transform .2s,border-color .3s;display:flex;align-items:center;gap:16px}
         .home-card:active{transform:scale(.97)}
-        .home-card:hover{border-color:rgba(232,200,122,0.2);box-shadow:0 4px 24px rgba(232,200,122,0.05)}
         .home-card.disabled{opacity:.4;pointer-events:none}
         .card-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-        .card-icon.chat{background:rgba(232,200,122,0.1)}
-        .card-icon.read{background:rgba(212,149,106,0.1)}
-        .card-icon.soon{background:rgba(138,126,110,0.1)}
-        .card-text .card-label{font-size:16px;color:var(--cream);margin-bottom:2px}
-        .card-text .card-desc{font-size:12px;color:var(--dim)}
+        .card-icon.chat{background:rgba(232,200,122,0.1)}.card-icon.read{background:rgba(212,149,106,0.1)}.card-icon.soon{background:rgba(138,126,110,0.1)}
+        .card-text .card-label{font-size:16px;color:var(--cream);margin-bottom:2px}.card-text .card-desc{font-size:12px;color:var(--dim)}
         .leaf{position:absolute;border-radius:0 50% 50% 50%;opacity:0;pointer-events:none;animation:leafFall linear infinite;z-index:1}
         @keyframes leafFall{0%{transform:translateY(-5vh) translateX(0) rotate(0deg);opacity:0}8%{opacity:.6}50%{transform:translateY(50vh) translateX(30px) rotate(180deg)}92%{opacity:.4}100%{transform:translateY(105vh) translateX(-20px) rotate(360deg);opacity:0}}
 
-        /* ═══ CHAT (same styles) ═══ */
+        /* CHAT */
         .back-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer}
-        .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;opacity:0;pointer-events:none;transition:opacity .3s}
-        .sidebar-overlay.show{opacity:1;pointer-events:auto}
-        .sidebar{position:fixed;top:0;left:0;bottom:0;width:300px;background:var(--bg);border-right:1px solid rgba(232,200,122,.1);z-index:11;transform:translateX(-100%);transition:transform .3s;display:flex;flex-direction:column;padding-top:max(12px,env(safe-area-inset-top))}
-        .sidebar.show{transform:translateX(0)}
+        .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;opacity:0;pointer-events:none;transition:opacity .3s}.sidebar-overlay.show{opacity:1;pointer-events:auto}
+        .sidebar{position:fixed;top:0;left:0;bottom:0;width:300px;background:var(--bg);border-right:1px solid rgba(232,200,122,.1);z-index:11;transform:translateX(-100%);transition:transform .3s;display:flex;flex-direction:column;padding-top:max(12px,env(safe-area-inset-top))}.sidebar.show{transform:translateX(0)}
         .sidebar-top{padding:12px 16px;border-bottom:1px solid rgba(232,200,122,.08)}
         .new-chat-btn{width:100%;padding:10px;background:var(--bg2);border:1px solid rgba(232,200,122,.15);border-radius:10px;color:var(--gold);font-family:'Noto Serif SC',serif;font-size:14px;cursor:pointer}
         .session-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}.session-list::-webkit-scrollbar{display:none}
-        .session-item{display:flex;align-items:center;padding:14px 16px;cursor:pointer;border-bottom:1px solid rgba(232,200,122,.04);gap:8px}
-        .session-item.active{background:var(--bg2)}
-        .session-item .preview{flex:1;font-size:14px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .session-item.active .preview{color:var(--gold)}
+        .session-item{display:flex;align-items:center;padding:14px 16px;cursor:pointer;border-bottom:1px solid rgba(232,200,122,.04);gap:8px}.session-item.active{background:var(--bg2)}
+        .session-item .preview{flex:1;font-size:14px;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.session-item.active .preview{color:var(--gold)}
         .icon-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:13px;cursor:pointer;border:none;background:none;border-radius:6px;flex-shrink:0}
         .profile-section{border-top:1px solid rgba(232,200,122,.1);padding:14px 16px;flex-shrink:0}
         .profile-section .label{font-size:12px;color:var(--gold-m);margin-bottom:8px}
-        .profile-section textarea{width:100%;height:80px;background:var(--bg3);border:1px solid rgba(232,200,122,.12);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;outline:none}
-        .profile-section textarea::placeholder{color:var(--dim)}
+        .profile-section textarea{width:100%;height:80px;background:var(--bg3);border:1px solid rgba(232,200,122,.12);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;outline:none}.profile-section textarea::placeholder{color:var(--dim)}
         .profile-save{margin-top:8px;padding:6px 14px;background:var(--bg2);border:1px solid rgba(232,200,122,.15);border-radius:8px;color:var(--gold);font-size:12px;cursor:pointer;font-family:'Noto Serif SC',serif}
         .profile-saved{font-size:11px;color:var(--gold-m);margin-left:8px;opacity:0;transition:opacity .3s}.profile-saved.show{opacity:1}
         .header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;position:relative}
@@ -68,21 +59,19 @@
         .toggle-label{font-size:12px;color:var(--dim)}.toggle-wrap.on .toggle-label{color:var(--gold)}
         .toggle-track{width:34px;height:20px;border-radius:10px;background:var(--bg3);border:1px solid var(--dim);position:relative;transition:.2s}
         .toggle-wrap.on .toggle-track{background:rgba(232,200,122,.2);border-color:var(--gold)}
-        .toggle-thumb{width:16px;height:16px;border-radius:50%;background:var(--dim);position:absolute;top:1px;left:1px;transition:.2s}
-        .toggle-wrap.on .toggle-thumb{transform:translateX(14px);background:var(--gold)}
+        .toggle-thumb{width:16px;height:16px;border-radius:50%;background:var(--dim);position:absolute;top:1px;left:1px;transition:.2s}.toggle-wrap.on .toggle-thumb{transform:translateX(14px);background:var(--gold)}
         .messages{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}.messages::-webkit-scrollbar{display:none}
         .msg{max-width:80%;padding:12px 16px;border-radius:18px;font-size:15px;line-height:1.7;animation:fadeUp .25s ease-out;word-break:break-word}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         .msg.user{align-self:flex-end;background:var(--bm);border-bottom-right-radius:4px}
         .msg.assistant{align-self:flex-start;background:var(--bh);border-bottom-left-radius:4px;border:1px solid rgba(232,200,122,.06)}
         .msg-images{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.msg-images img{max-width:200px;max-height:160px;border-radius:10px;object-fit:cover}
-        .msg-time{font-size:10px;color:var(--dim);margin-top:4px;opacity:.6}
-        .token-info{font-size:10px;color:var(--dim);margin-top:4px;opacity:.5}
+        .msg-time{font-size:10px;color:var(--dim);margin-top:4px;opacity:.6}.token-info{font-size:10px;color:var(--dim);margin-top:4px;opacity:.5}
         .md-content p{margin-bottom:8px}.md-content p:last-child{margin-bottom:0}.md-content strong{color:var(--gold)}.md-content em{color:var(--warm)}
         .md-content ul,.md-content ol{margin:6px 0 6px 20px}.md-content li{margin-bottom:2px}
         .md-content pre{background:rgba(0,0,0,.3);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0;font-size:13px}
-        .md-content code{background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace}
-        .md-content pre code{background:none;padding:0}.md-content blockquote{border-left:3px solid var(--gold-m);padding-left:10px;color:var(--dim);margin:8px 0}
+        .md-content code{background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace}.md-content pre code{background:none;padding:0}
+        .md-content blockquote{border-left:3px solid var(--gold-m);padding-left:10px;color:var(--dim);margin:8px 0}
         .md-content a{color:var(--gold)}.md-content hr{border:none;border-top:1px solid rgba(232,200,122,.1);margin:10px 0}
         .tool-info{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(232,200,122,.08)}
         .tool-tag{display:inline-flex;padding:2px 8px;border-radius:8px;background:rgba(232,200,122,.08);border:1px solid rgba(232,200,122,.12);font-size:11px;color:var(--gold-m);cursor:pointer}
@@ -91,127 +80,85 @@
         .thinking-toggle-btn{font-size:12px;color:var(--warm);cursor:pointer;user-select:none}
         .thinking-content{display:none;margin-top:6px;padding:8px;background:rgba(0,0,0,.15);border-radius:8px;font-size:12px;color:var(--dim);line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap}.thinking-content.show{display:block}
         .status-bar{align-self:flex-start;padding:8px 20px;display:none;align-items:center;gap:8px}.status-bar.show{display:flex}
-        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--gold-m);animation:pulse 1.2s infinite}
-        .status-text{font-size:13px;color:var(--dim)}
+        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--gold-m);animation:pulse 1.2s infinite}.status-text{font-size:13px;color:var(--dim)}
         @keyframes pulse{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}
         .attach-preview{display:none;padding:8px 16px;gap:8px;flex-wrap:wrap;align-items:center;flex-shrink:0}.attach-preview.show{display:flex}
-        .attach-thumb{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid rgba(232,200,122,.15)}
-        .attach-thumb img{width:100%;height:100%;object-fit:cover}
+        .attach-thumb{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid rgba(232,200,122,.15)}.attach-thumb img{width:100%;height:100%;object-fit:cover}
         .attach-thumb .remove{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,.7);border-radius:50%;border:none;color:var(--cream);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
         .attach-file-tag{padding:6px 12px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px}
         .attach-file-tag .remove{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px}
         .input-bar{padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid rgba(232,200,122,.08);background:var(--bg);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
         .attach-btn,.send-btn{width:42px;height:42px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
-        .attach-btn{background:var(--bg2);color:var(--gold-m);font-size:20px}
-        .send-btn{background:var(--gold);color:var(--bg);font-size:18px;transition:opacity .2s}.send-btn:disabled{opacity:.3}
-        .input-bar textarea{flex:1;background:var(--bg3);border:1px solid rgba(232,200,122,.12);border-radius:22px;padding:10px 18px;font-size:15px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;max-height:120px;line-height:1.5;outline:none}
-        .input-bar textarea::placeholder{color:var(--dim)}
+        .attach-btn{background:var(--bg2);color:var(--gold-m);font-size:20px}.send-btn{background:var(--gold);color:var(--bg);font-size:18px}.send-btn:disabled{opacity:.3}
+        .input-bar textarea{flex:1;background:var(--bg3);border:1px solid rgba(232,200,122,.12);border-radius:22px;padding:10px 18px;font-size:15px;font-family:'Noto Serif SC',serif;color:var(--cream);resize:none;max-height:120px;line-height:1.5;outline:none}.input-bar textarea::placeholder{color:var(--dim)}
         .welcome{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}
         #fileInput,#bookUpload{display:none}
 
-        /* ═══ READING ═══ */
+        /* READING */
         .r-header{padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);display:flex;align-items:center;gap:12px;flex-shrink:0}
         .r-header .r-title{flex:1;font-size:15px;color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .r-header .r-btn{background:none;border:none;color:var(--gold-m);font-size:18px;cursor:pointer;padding:4px 8px}
-        .bookshelf{flex:1;overflow-y:auto;padding:20px 16px}
-        .bookshelf-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px}
+        .bookshelf{flex:1;overflow-y:auto;padding:20px 16px}.bookshelf-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px}
         .book-grid{display:flex;flex-direction:column;gap:12px}
-        .book-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:border-color .2s}
+        .book-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer}
         .book-item:active{border-color:rgba(232,200,122,.2)}
         .book-icon{width:40px;height:52px;background:linear-gradient(135deg,var(--warm),var(--rust));border-radius:4px 8px 8px 4px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:rgba(255,255,255,.8)}
-        .book-info{flex:1;overflow:hidden}.book-info .btitle{font-size:15px;color:var(--cream);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .book-info .btime{font-size:11px;color:var(--dim)}
+        .book-info{flex:1;overflow:hidden}.book-info .btitle{font-size:15px;color:var(--cream);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.book-info .btime{font-size:11px;color:var(--dim)}
         .book-del{color:var(--dim);background:none;border:none;font-size:16px;cursor:pointer;padding:8px}
         .upload-btn{width:100%;padding:14px;background:var(--bg2);border:1px dashed rgba(232,200,122,.2);border-radius:12px;color:var(--gold-m);font-size:14px;cursor:pointer;text-align:center;font-family:'Noto Serif SC',serif;margin-bottom:16px}
         #readerWrap{flex:1;overflow:hidden;position:relative;background:var(--bg);min-height:300px}
         .r-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid rgba(232,200,122,.06);flex-shrink:0}
-        .r-nav button{background:none;border:none;color:var(--gold-m);font-size:20px;cursor:pointer;padding:8px 16px}
-        .r-nav .page-info{font-size:12px;color:var(--dim)}
-        .r-settings{position:absolute;top:50px;right:16px;background:var(--bg2);border:1px solid rgba(232,200,122,.1);border-radius:12px;padding:16px;z-index:20;display:none;min-width:200px}
-        .r-settings.show{display:block}
-        .r-settings .s-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:var(--cream)}
-        .r-settings .s-row:last-child{margin-bottom:0}
+        .r-nav button{background:none;border:none;color:var(--gold-m);font-size:20px;cursor:pointer;padding:8px 16px}.r-nav .page-info{font-size:12px;color:var(--dim)}
+        .r-settings{position:absolute;top:50px;right:16px;background:var(--bg2);border:1px solid rgba(232,200,122,.1);border-radius:12px;padding:16px;z-index:20;display:none;min-width:200px}.r-settings.show{display:block}
+        .r-settings .s-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:var(--cream)}.r-settings .s-row:last-child{margin-bottom:0}
         .r-settings select{background:var(--bg3);color:var(--cream);border:1px solid var(--dim);border-radius:6px;padding:4px 8px;font-size:12px;outline:none;font-family:'Noto Serif SC',serif}
         .comment-bubble{position:fixed;bottom:60px;left:16px;right:16px;background:var(--bh);border:1px solid rgba(232,200,122,.1);border-radius:14px;padding:12px 16px;font-size:14px;line-height:1.6;z-index:30;animation:slideUp .3s;display:none;max-height:120px;overflow-y:auto}
-        .comment-bubble.show{display:block}
-        .comment-bubble .cb-text{color:var(--cream)}.comment-bubble .cb-close{position:absolute;top:8px;right:12px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px}
+        .comment-bubble.show{display:block}.comment-bubble .cb-text{color:var(--cream)}.comment-bubble .cb-close{position:absolute;top:8px;right:12px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px}
         .comment-bubble .cb-tokens{font-size:10px;color:var(--dim);margin-top:4px}
         @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        .highlight-bar{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--bg);padding:10px 24px;border-radius:20px;font-size:14px;cursor:pointer;z-index:40;display:none;box-shadow:0 4px 16px rgba(0,0,0,.4);font-family:'Noto Serif SC',serif}
-        .highlight-bar.show{display:block}
+        .highlight-bar{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--bg);padding:10px 24px;border-radius:20px;font-size:14px;cursor:pointer;z-index:40;display:none;box-shadow:0 4px 16px rgba(0,0,0,.4);font-family:'Noto Serif SC',serif}.highlight-bar.show{display:block}
     </style>
 </head>
 <body>
 
-<!-- ═══════ HOME VIEW ═══════ -->
+<!-- HOME -->
 <div class="view active" id="homeView">
     <div class="home-bg" id="homeBg">
-        <svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMax slice" style="position:absolute;bottom:0;width:100%;height:60%;opacity:.6">
-            <defs>
-                <linearGradient id="lk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2030"/><stop offset="100%" stop-color="#1a1612"/></linearGradient>
-            </defs>
+        <svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMax slice">
+            <defs><linearGradient id="lk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2030"/><stop offset="100%" stop-color="#1a1612"/></linearGradient></defs>
             <path d="M0,100 L40,70 L80,85 L140,45 L200,80 L260,50 L320,75 L360,55 L400,70 L400,100Z" fill="#2a2535" opacity=".4"/>
             <path d="M0,100 L60,65 L120,90 L180,55 L240,80 L300,60 L360,80 L400,70 L400,100Z" fill="#2a2520" opacity=".7"/>
-            <path d="M130,45 L140,45 L150,55Z" fill="rgba(232,200,122,.15)"/>
-            <path d="M250,50 L260,50 L270,60Z" fill="rgba(232,200,122,.12)"/>
-            <path d="M350,55 L360,55 L368,63Z" fill="rgba(232,200,122,.1)"/>
+            <path d="M130,45 L140,45 L150,55Z" fill="rgba(232,200,122,.15)"/><path d="M250,50 L260,50 L270,60Z" fill="rgba(232,200,122,.12)"/><path d="M350,55 L360,55 L368,63Z" fill="rgba(232,200,122,.1)"/>
             <rect y="100" width="400" height="100" fill="url(#lk)"/>
             <path d="M0,100 L60,135 L120,110 L180,145 L240,120 L300,140 L360,120 L400,130 L400,100Z" fill="#1a2535" opacity=".1"/>
-            <line x1="30" y1="120" x2="160" y2="120" stroke="rgba(232,200,122,.04)" stroke-width=".5"/>
-            <line x1="200" y1="140" x2="370" y2="140" stroke="rgba(232,200,122,.04)" stroke-width=".5"/>
         </svg>
     </div>
     <div class="home-content">
         <div class="home-title">Cyrus</div>
         <div class="home-sub">your private space</div>
         <div class="home-cards">
-            <div class="home-card" onclick="showView('chat')">
-                <div class="card-icon chat">💬</div>
-                <div class="card-text"><div class="card-label">聊天</div><div class="card-desc">和 Cyrus 说说话</div></div>
-            </div>
-            <div class="home-card" onclick="showView('reading')">
-                <div class="card-icon read">📖</div>
-                <div class="card-text"><div class="card-label">阅读</div><div class="card-desc">一起读一本书</div></div>
-            </div>
-            <div class="home-card disabled">
-                <div class="card-icon soon">💌</div>
-                <div class="card-text"><div class="card-label">悄悄话</div><div class="card-desc">即将到来</div></div>
-            </div>
-            <div class="home-card disabled">
-                <div class="card-icon soon">📔</div>
-                <div class="card-text"><div class="card-label">日记</div><div class="card-desc">即将到来</div></div>
-            </div>
+            <div class="home-card" onclick="showView('chat')"><div class="card-icon chat">💬</div><div class="card-text"><div class="card-label">聊天</div><div class="card-desc">和 Cyrus 说说话</div></div></div>
+            <div class="home-card" onclick="showView('reading')"><div class="card-icon read">📖</div><div class="card-text"><div class="card-label">阅读</div><div class="card-desc">一起读一本书</div></div></div>
+            <div class="home-card disabled"><div class="card-icon soon">💌</div><div class="card-text"><div class="card-label">悄悄话</div><div class="card-desc">即将到来</div></div></div>
+            <div class="home-card disabled"><div class="card-icon soon">📔</div><div class="card-text"><div class="card-label">日记</div><div class="card-desc">即将到来</div></div></div>
         </div>
     </div>
 </div>
 
-<!-- ═══════ CHAT VIEW ═══════ -->
+<!-- CHAT -->
 <div class="view" id="chatView">
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-top"><button class="new-chat-btn" onclick="newChat()">+ 新对话</button></div>
         <div class="session-list" id="sessionList"></div>
-        <div class="profile-section">
-            <div class="label">我的信息</div>
-            <textarea id="profileInput" placeholder="写一些关于你自己的信息..."></textarea>
-            <div style="display:flex;align-items:center"><button class="profile-save" onclick="saveProfile()">保存</button><span class="profile-saved" id="profileSaved">已保存</span></div>
-        </div>
+        <div class="profile-section"><div class="label">我的信息</div><textarea id="profileInput" placeholder="写一些关于你自己的信息..."></textarea><div style="display:flex;align-items:center"><button class="profile-save" onclick="saveProfile()">保存</button><span class="profile-saved" id="profileSaved">已保存</span></div></div>
     </div>
     <div class="header">
-        <div style="display:flex;align-items:center;gap:4px">
-            <button class="back-btn" onclick="showView('home')">←</button>
-            <button class="back-btn" onclick="openSidebar()" style="font-size:22px">≡</button>
-        </div>
+        <div style="display:flex;align-items:center;gap:4px"><button class="back-btn" onclick="showView('home')">←</button><button class="back-btn" onclick="openSidebar()" style="font-size:22px">≡</button></div>
         <h1>Cyrus</h1>
         <div class="header-right">
-            <select class="model-select" id="modelSelect" onchange="currentModel=this.value">
-                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
-                <option value="claude-opus-4-6">Opus 4.6</option>
-            </select>
-            <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()">
-                <span class="toggle-label">思考</span>
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-            </div>
+            <select class="model-select" id="modelSelect" onchange="currentModel=this.value"><option value="claude-sonnet-4-6">Sonnet 4.6</option><option value="claude-opus-4-6">Opus 4.6</option></select>
+            <div class="toggle-wrap" id="thinkingToggle" onclick="toggleThinking()"><span class="toggle-label">思考</span><div class="toggle-track"><div class="toggle-thumb"></div></div></div>
         </div>
     </div>
     <div class="messages" id="messages"><div class="welcome" id="welcome">说点什么吧</div></div>
@@ -225,56 +172,26 @@
     </div>
 </div>
 
-<!-- ═══════ READING VIEW ═══════ -->
+<!-- READING -->
 <div class="view" id="readingView">
-    <!-- Bookshelf -->
     <div id="bookshelfPanel">
-        <div class="r-header">
-            <button class="back-btn" onclick="showView('home')">←</button>
-            <span class="r-title">书架</span>
-        </div>
+        <div class="r-header"><button class="back-btn" onclick="showView('home')">←</button><span class="r-title">书架</span></div>
         <div class="bookshelf" id="bookshelfContent">
             <button class="upload-btn" onclick="document.getElementById('bookUpload').click()">+ 上传 epub</button>
             <input type="file" id="bookUpload" accept=".epub" onchange="uploadBook(this.files[0])">
             <div class="book-grid" id="bookGrid"></div>
         </div>
     </div>
-    <!-- Reader -->
     <div id="readerPanel" style="display:none">
-        <div class="r-header">
-            <button class="back-btn" onclick="closeReader()">←</button>
-            <span class="r-title" id="readerTitle">书名</span>
-            <button class="r-btn" onclick="toggleSettings()">⚙</button>
-        </div>
+        <div class="r-header"><button class="back-btn" onclick="closeReader()">←</button><span class="r-title" id="readerTitle">书名</span><button class="r-btn" onclick="toggleSettings()">⚙</button></div>
         <div class="r-settings" id="readerSettings">
-            <div class="s-row"><span>自动评论</span>
-                <select id="commentInterval" onchange="updateInterval(this.value)">
-                    <option value="0">关闭</option>
-                    <option value="3" selected>3 分钟</option>
-                    <option value="5">5 分钟</option>
-                </select>
-            </div>
-            <div class="s-row"><span>字号</span>
-                <select id="fontSizeSelect" onchange="updateFontSize(this.value)">
-                    <option value="90">小</option>
-                    <option value="100" selected>中</option>
-                    <option value="115">大</option>
-                    <option value="130">特大</option>
-                </select>
-            </div>
+            <div class="s-row"><span>自动评论</span><select id="commentInterval" onchange="updateInterval(this.value)"><option value="0">关闭</option><option value="3" selected>3 分钟</option><option value="5">5 分钟</option></select></div>
+            <div class="s-row"><span>字号</span><select id="fontSizeSelect" onchange="updateFontSize(this.value)"><option value="90">小</option><option value="100" selected>中</option><option value="115">大</option><option value="130">特大</option></select></div>
         </div>
         <div id="readerWrap"></div>
-        <div class="r-nav">
-            <button onclick="prevPage()">◀</button>
-            <span class="page-info" id="pageInfo"></span>
-            <button onclick="nextPage()">▶</button>
-        </div>
+        <div class="r-nav"><button onclick="prevPage()">◀</button><span class="page-info" id="pageInfo"></span><button onclick="nextPage()">▶</button></div>
     </div>
-    <div class="comment-bubble" id="commentBubble">
-        <button class="cb-close" onclick="hideComment()">✕</button>
-        <div class="cb-text" id="commentText"></div>
-        <div class="cb-tokens" id="commentTokens"></div>
-    </div>
+    <div class="comment-bubble" id="commentBubble"><button class="cb-close" onclick="hideComment()">✕</button><div class="cb-text" id="commentText"></div><div class="cb-tokens" id="commentTokens"></div></div>
     <div class="highlight-bar" id="highlightBar" onclick="sendHighlight()">让 C 看看</div>
 </div>
 
@@ -286,211 +203,111 @@ let currentBook=null,rendition=null,epubBook=null,currentPageText='',selectedTex
 let commentTimer=null,commentMinutes=3;
 const $=id=>document.getElementById(id);
 
-// ═══ VIEW SWITCHING ═══
-function showView(name){
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    $(name+'View').classList.add('active');
-    if(name==='chat'&&!currentSessionId) initChat();
-    if(name==='reading') loadBookshelf();
-}
+function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(name+'View').classList.add('active');if(name==='chat'&&!currentSessionId)initChat();if(name==='reading')loadBookshelf()}
 
-// ═══ HOME LEAVES ═══
-(function createLeaves(){
-    const c=$('homeBg'),colors=['#e8c87a','#d4956a','#c07040','#a08450','#8a7e6e'];
-    for(let i=0;i<12;i++){
-        const l=document.createElement('div');l.className='leaf';
-        l.style.left=Math.random()*100+'%';l.style.background=colors[Math.floor(Math.random()*colors.length)];
-        l.style.animationDuration=(10+Math.random()*15)+'s';l.style.animationDelay=Math.random()*12+'s';
-        const s=5+Math.random()*7;l.style.width=s+'px';l.style.height=s+'px';
-        c.appendChild(l);
-    }
-})();
+(function(){const c=$('homeBg'),cols=['#e8c87a','#d4956a','#c07040','#a08450','#8a7e6e'];for(let i=0;i<12;i++){const l=document.createElement('div');l.className='leaf';l.style.left=Math.random()*100+'%';l.style.background=cols[Math.floor(Math.random()*cols.length)];l.style.animationDuration=(10+Math.random()*15)+'s';l.style.animationDelay=Math.random()*12+'s';const s=5+Math.random()*7;l.style.width=s+'px';l.style.height=s+'px';c.appendChild(l)}})();
 
-// ═══ CHAT FUNCTIONS ═══
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
 function renderMd(t){return marked.parse(t)}
 function fmtTime(ts){if(!ts)return '';const d=new Date(ts*1000);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')}
 function fmtTk(n){return n>=1000?(n/1000).toFixed(1)+'k':n.toString()}
 function openSidebar(){$('sidebar').classList.add('show');$('sidebarOverlay').classList.add('show')}
 function closeSidebar(){$('sidebar').classList.remove('show');$('sidebarOverlay').classList.remove('show')}
-
 async function loadProfile(){try{const r=await fetch('/api/profile');const d=await r.json();$('profileInput').value=d.profile||''}catch(e){}}
-async function saveProfile(){
-    try{await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile:$('profileInput').value})});
-    const s=$('profileSaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1500)}catch(e){}
-}
+async function saveProfile(){try{await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile:$('profileInput').value})});const s=$('profileSaved');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),1500)}catch(e){}}
 
 let sessionsList=[];
 async function refreshSessions(){try{const r=await fetch('/api/sessions');sessionsList=(await r.json()).sessions;renderSessionList()}catch(e){}}
-function renderSessionList(){
-    const el=$('sessionList');el.innerHTML='';
-    sessionsList.forEach(s=>{
-        const d=document.createElement('div');d.className='session-item'+(s.id===currentSessionId?' active':'');
-        const p=document.createElement('span');p.className='preview';p.textContent=s.preview;p.onclick=()=>loadSession(s.id);
-        const x=document.createElement('button');x.className='icon-btn';x.textContent='↓';x.onclick=e=>{e.stopPropagation();exportSession(s.id)};
-        const dl=document.createElement('button');dl.className='icon-btn';dl.textContent='✕';dl.onclick=e=>{e.stopPropagation();deleteSession(s.id)};
-        d.appendChild(p);d.appendChild(x);d.appendChild(dl);el.appendChild(d);
-    });
-}
+function renderSessionList(){const el=$('sessionList');el.innerHTML='';sessionsList.forEach(s=>{const d=document.createElement('div');d.className='session-item'+(s.id===currentSessionId?' active':'');const p=document.createElement('span');p.className='preview';p.textContent=s.preview;p.onclick=()=>loadSession(s.id);const x=document.createElement('button');x.className='icon-btn';x.textContent='↓';x.onclick=e=>{e.stopPropagation();exportSession(s.id)};const dl=document.createElement('button');dl.className='icon-btn';dl.textContent='✕';dl.onclick=e=>{e.stopPropagation();deleteSession(s.id)};d.appendChild(p);d.appendChild(x);d.appendChild(dl);el.appendChild(d)})}
 async function newChat(){try{const r=await fetch('/api/sessions',{method:'POST'});currentSessionId=(await r.json()).session_id;clearMessages();closeSidebar();await refreshSessions()}catch(e){}}
-async function loadSession(sid){
-    currentSessionId=sid;
-    try{const r=await fetch(`/api/sessions/${sid}`);const d=await r.json();clearMessages();
-    d.messages.forEach(m=>{if(typeof m.content==='string')addMessage(m.role,m.content,null,m.time)});closeSidebar();renderSessionList()}catch(e){}
-}
-async function deleteSession(sid){
-    try{await fetch(`/api/sessions/${sid}`,{method:'DELETE'});
-    if(sid===currentSessionId){const rem=sessionsList.filter(s=>s.id!==sid);if(rem.length>0)await loadSession(rem[0].id);else await newChat()}
-    await refreshSessions()}catch(e){}
-}
+async function loadSession(sid){currentSessionId=sid;try{const r=await fetch(`/api/sessions/${sid}`);const d=await r.json();clearMessages();d.messages.forEach(m=>{if(typeof m.content==='string')addMessage(m.role,m.content,null,m.time)});closeSidebar();renderSessionList()}catch(e){}}
+async function deleteSession(sid){try{await fetch(`/api/sessions/${sid}`,{method:'DELETE'});if(sid===currentSessionId){const rem=sessionsList.filter(s=>s.id!==sid);if(rem.length>0)await loadSession(rem[0].id);else await newChat()}await refreshSessions()}catch(e){}}
 function exportSession(sid){const a=document.createElement('a');a.href=`/api/sessions/${sid}/export`;a.download=`cyrus-chat-${sid}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a)}
 function toggleThinking(){thinkingEnabled=!thinkingEnabled;$('thinkingToggle').classList.toggle('on',thinkingEnabled)}
 
-async function handleFiles(fl){
-    for(const f of fl){
-        if(f.type.startsWith('image/')){const du=await resizeImg(f,1024);pendingImages.push({data:du.split(',')[1],media_type:f.type||'image/jpeg',preview:du})}
-        else{const t=await readTxt(f);if(t)pendingFiles.push({name:f.name,content:t})}
-    }
-    renderAttach();$('fileInput').value='';
-}
+async function handleFiles(fl){for(const f of fl){if(f.type.startsWith('image/')){const du=await resizeImg(f,1024);pendingImages.push({data:du.split(',')[1],media_type:f.type||'image/jpeg',preview:du})}else{const t=await readTxt(f);if(t)pendingFiles.push({name:f.name,content:t})}}renderAttach();$('fileInput').value=''}
 function resizeImg(f,mx){return new Promise(r=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');let w=i.width,h=i.height;if(w>mx||h>mx){if(w>h){h=h*mx/w;w=mx}else{w=w*mx/h;h=mx}}c.width=w;c.height=h;c.getContext('2d').drawImage(i,0,0,w,h);r(c.toDataURL('image/jpeg',.85))};i.src=URL.createObjectURL(f)})}
 function readTxt(f){return new Promise(r=>{const rd=new FileReader();rd.onload=e=>{let t=e.target.result;if(t.length>5000)t=t.slice(0,5000)+'\n...(已截断)';r(t)};rd.onerror=()=>r(null);rd.readAsText(f)})}
-function renderAttach(){
-    const el=$('attachPreview');el.innerHTML='';const has=pendingImages.length>0||pendingFiles.length>0;el.classList.toggle('show',has);
-    pendingImages.forEach((img,i)=>{const t=document.createElement('div');t.className='attach-thumb';t.innerHTML=`<img src="${img.preview}"><button class="remove" onclick="removeImg(${i})">✕</button>`;el.appendChild(t)});
-    pendingFiles.forEach((f,i)=>{const t=document.createElement('div');t.className='attach-file-tag';t.innerHTML=`📄 ${escapeHtml(f.name)} <button class="remove" onclick="removeFile(${i})">✕</button>`;el.appendChild(t)});
-}
+function renderAttach(){const el=$('attachPreview');el.innerHTML='';const has=pendingImages.length>0||pendingFiles.length>0;el.classList.toggle('show',has);pendingImages.forEach((img,i)=>{const t=document.createElement('div');t.className='attach-thumb';t.innerHTML=`<img src="${img.preview}"><button class="remove" onclick="removeImg(${i})">✕</button>`;el.appendChild(t)});pendingFiles.forEach((f,i)=>{const t=document.createElement('div');t.className='attach-file-tag';t.innerHTML=`📄 ${escapeHtml(f.name)} <button class="remove" onclick="removeFile(${i})">✕</button>`;el.appendChild(t)})}
 function removeImg(i){pendingImages.splice(i,1);renderAttach()}
 function removeFile(i){pendingFiles.splice(i,1);renderAttach()}
 
 function clearMessages(){$('messages').innerHTML='<div class="welcome" id="welcome">说点什么吧</div>'}
-function addMessage(role,text,imgs,ts){
-    const w=$('welcome');if(w)w.remove();const d=document.createElement('div');d.className=`msg ${role}`;
-    if(imgs&&imgs.length){const id=document.createElement('div');id.className='msg-images';imgs.forEach(s=>{const i=document.createElement('img');i.src=s;id.appendChild(i)});d.appendChild(id)}
-    if(text){const s=document.createElement('div');if(role==='assistant'){s.className='md-content';s.innerHTML=renderMd(text)}else{s.innerHTML=escapeHtml(text).replace(/\n/g,'<br>')}d.appendChild(s)}
-    if(ts){const t=document.createElement('div');t.className='msg-time';t.textContent=fmtTime(ts);d.appendChild(t)}
-    $('messages').appendChild(d);$('messages').scrollTop=$('messages').scrollHeight
-}
-function buildAssist(reply,tools,think,ts,tokens){
-    const w=$('welcome');if(w)w.remove();const d=document.createElement('div');d.className='msg assistant';
-    if(tools&&tools.length){const td=document.createElement('div');td.className='tool-info';tools.forEach(tc=>{const tg=document.createElement('span');tg.className='tool-tag';tg.textContent='⚙ '+tc.name;const dt=document.createElement('div');dt.className='tool-detail';let tx='输入: '+JSON.stringify(tc.input,null,2);if(tc.result_preview)tx+='\n\n结果: '+tc.result_preview;dt.textContent=tx;tg.onclick=()=>dt.classList.toggle('show');td.appendChild(tg);td.appendChild(dt)});d.appendChild(td)}
-    if(think){const th=document.createElement('div');th.className='thinking-section';const b=document.createElement('div');b.className='thinking-toggle-btn';b.textContent='▶ 思考过程';const c=document.createElement('div');c.className='thinking-content';c.textContent=think;b.onclick=()=>{const on=c.classList.toggle('show');b.textContent=on?'▼ 思考过程':'▶ 思考过程'};th.appendChild(b);th.appendChild(c);d.appendChild(th)}
-    if(reply){const t=document.createElement('div');t.className='md-content';t.innerHTML=renderMd(reply);d.appendChild(t)}
-    if(ts){const t=document.createElement('div');t.className='msg-time';t.textContent=fmtTime(ts);d.appendChild(t)}
-    if(tokens){const t=document.createElement('div');t.className='token-info';t.textContent=`${tokens.model||''} · 输入 ${fmtTk(tokens.input)} · 输出 ${fmtTk(tokens.output)}`;d.appendChild(t)}
-    $('messages').appendChild(d);$('messages').scrollTop=$('messages').scrollHeight
-}
+function addMessage(role,text,imgs,ts){const w=$('welcome');if(w)w.remove();const d=document.createElement('div');d.className=`msg ${role}`;if(imgs&&imgs.length){const id=document.createElement('div');id.className='msg-images';imgs.forEach(s=>{const i=document.createElement('img');i.src=s;id.appendChild(i)});d.appendChild(id)}if(text){const s=document.createElement('div');if(role==='assistant'){s.className='md-content';s.innerHTML=renderMd(text)}else{s.innerHTML=escapeHtml(text).replace(/\n/g,'<br>')}d.appendChild(s)}if(ts){const t=document.createElement('div');t.className='msg-time';t.textContent=fmtTime(ts);d.appendChild(t)}$('messages').appendChild(d);$('messages').scrollTop=$('messages').scrollHeight}
+function buildAssist(reply,tools,think,ts,tokens){const w=$('welcome');if(w)w.remove();const d=document.createElement('div');d.className='msg assistant';if(tools&&tools.length){const td=document.createElement('div');td.className='tool-info';tools.forEach(tc=>{const tg=document.createElement('span');tg.className='tool-tag';tg.textContent='⚙ '+tc.name;const dt=document.createElement('div');dt.className='tool-detail';let tx='输入: '+JSON.stringify(tc.input,null,2);if(tc.result_preview)tx+='\n\n结果: '+tc.result_preview;dt.textContent=tx;tg.onclick=()=>dt.classList.toggle('show');td.appendChild(tg);td.appendChild(dt)});d.appendChild(td)}if(think){const th=document.createElement('div');th.className='thinking-section';const b=document.createElement('div');b.className='thinking-toggle-btn';b.textContent='▶ 思考过程';const c=document.createElement('div');c.className='thinking-content';c.textContent=think;b.onclick=()=>{const on=c.classList.toggle('show');b.textContent=on?'▼ 思考过程':'▶ 思考过程'};th.appendChild(b);th.appendChild(c);d.appendChild(th)}if(reply){const t=document.createElement('div');t.className='md-content';t.innerHTML=renderMd(reply);d.appendChild(t)}if(ts){const t=document.createElement('div');t.className='msg-time';t.textContent=fmtTime(ts);d.appendChild(t)}if(tokens){const t=document.createElement('div');t.className='token-info';t.textContent=`${tokens.model||''} · 输入 ${fmtTk(tokens.input)} · 输出 ${fmtTk(tokens.output)}`;d.appendChild(t)}$('messages').appendChild(d);$('messages').scrollTop=$('messages').scrollHeight}
 function showStatus(t){$('statusText').textContent=t;$('statusBar').classList.add('show');$('messages').scrollTop=$('messages').scrollHeight}
 function hideStatus(){$('statusBar').classList.remove('show')}
 $('input').addEventListener('input',()=>{const i=$('input');i.style.height='auto';i.style.height=Math.min(i.scrollHeight,120)+'px'});
 
-async function sendMessage(){
-    const text=$('input').value.trim(),has=pendingImages.length>0||pendingFiles.length>0;
-    if(!text&&!has)return;$('input').value='';$('input').style.height='auto';$('send').disabled=true;
-    let dt=text,mt=text;
-    if(pendingFiles.length){const ft=pendingFiles.map(f=>'--- '+f.name+' ---\n'+f.content);mt=(text?text+'\n\n':'')+ft.join('\n\n');if(!dt)dt='📄 '+pendingFiles.map(f=>f.name).join(', ')}
-    addMessage('user',dt,pendingImages.map(i=>i.preview),Date.now()/1000);
-    const body={message:mt,session_id:currentSessionId,thinking:thinkingEnabled,model:currentModel,images:pendingImages.map(i=>({data:i.data,media_type:i.media_type}))};
-    pendingImages=[];pendingFiles=[];renderAttach();showStatus('正在思考...');
-    try{
-        const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        const reader=resp.body.getReader(),dec=new TextDecoder();let buf='',reply='',think=null,tools=null,rt=null,tk=null;
-        while(true){const{done,value}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});const parts=buf.split('\n\n');buf=parts.pop();
-        for(const p of parts){if(!p.startsWith('data: '))continue;try{const d=JSON.parse(p.slice(6));switch(d.type){case'status':showStatus(d.text);break;case'tools':tools=d.calls;break;case'thinking':think=d.content;break;case'reply':reply=d.content;rt=d.time;break;case'done':tk=d.tokens;break}}catch(e){}}}
-        hideStatus();buildAssist(reply,tools,think,rt,tk);refreshSessions()
-    }catch(e){hideStatus();addMessage('assistant','连接断了...再试一次？')}
-    $('send').disabled=false;$('input').focus()
-}
+async function sendMessage(){const text=$('input').value.trim(),has=pendingImages.length>0||pendingFiles.length>0;if(!text&&!has)return;$('input').value='';$('input').style.height='auto';$('send').disabled=true;let dt=text,mt=text;if(pendingFiles.length){const ft=pendingFiles.map(f=>'--- '+f.name+' ---\n'+f.content);mt=(text?text+'\n\n':'')+ft.join('\n\n');if(!dt)dt='📄 '+pendingFiles.map(f=>f.name).join(', ')}addMessage('user',dt,pendingImages.map(i=>i.preview),Date.now()/1000);const body={message:mt,session_id:currentSessionId,thinking:thinkingEnabled,model:currentModel,images:pendingImages.map(i=>({data:i.data,media_type:i.media_type}))};pendingImages=[];pendingFiles=[];renderAttach();showStatus('正在思考...');try{const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const reader=resp.body.getReader(),dec=new TextDecoder();let buf='',reply='',think=null,tools=null,rt=null,tk=null;while(true){const{done,value}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});const parts=buf.split('\n\n');buf=parts.pop();for(const p of parts){if(!p.startsWith('data: '))continue;try{const d=JSON.parse(p.slice(6));switch(d.type){case'status':showStatus(d.text);break;case'tools':tools=d.calls;break;case'thinking':think=d.content;break;case'reply':reply=d.content;rt=d.time;break;case'done':tk=d.tokens;break}}catch(e){}}}hideStatus();buildAssist(reply,tools,think,rt,tk);refreshSessions()}catch(e){hideStatus();addMessage('assistant','连接断了...再试一次？')}$('send').disabled=false;$('input').focus()}
 
-async function initChat(){
-    loadProfile();
-    try{const r=await fetch('/api/sessions');const d=await r.json();
-    if(d.sessions.length===0)await newChat();else{sessionsList=d.sessions;currentSessionId=d.sessions[0].id;renderSessionList();await loadSession(currentSessionId)}}catch(e){currentSessionId='default'}
-}
+async function initChat(){loadProfile();try{const r=await fetch('/api/sessions');const d=await r.json();if(d.sessions.length===0)await newChat();else{sessionsList=d.sessions;currentSessionId=d.sessions[0].id;renderSessionList();await loadSession(currentSessionId)}}catch(e){currentSessionId='default'}}
 
-// ═══ READING FUNCTIONS ═══
-async function loadBookshelf(){
-    try{const r=await fetch('/api/books');const d=await r.json();const g=$('bookGrid');g.innerHTML='';
-    if(d.books.length===0){g.innerHTML='<div class="bookshelf-empty">还没有书，上传一本 epub 开始阅读吧</div>';return}
-    d.books.forEach(b=>{
-        const item=document.createElement('div');item.className='book-item';
-        item.innerHTML=`<div class="book-icon">📕</div><div class="book-info"><div class="btitle">${escapeHtml(b.title)}</div><div class="btime">${fmtTime(b.time)}</div></div>`;
-        item.onclick=()=>openReader(b.id,b.title);
-        const del=document.createElement('button');del.className='book-del';del.textContent='✕';del.onclick=e=>{e.stopPropagation();deleteBook(b.id)};
-        item.appendChild(del);g.appendChild(item);
-    })}catch(e){}
-}
-
-async function uploadBook(file){
-    if(!file)return;const fd=new FormData();fd.append('file',file);
-    try{const r=await fetch('/api/books/upload',{method:'POST',body:fd});const d=await r.json();
-    if(d.error){alert(d.error);return}loadBookshelf()}catch(e){alert('上传失败')}
-}
-
-async function deleteBook(id){
-    try{await fetch(`/api/books/${id}`,{method:'DELETE'});loadBookshelf()}catch(e){}
-}
+// ═══ READING ═══
+async function loadBookshelf(){try{const r=await fetch('/api/books');const d=await r.json();const g=$('bookGrid');g.innerHTML='';if(d.books.length===0){g.innerHTML='<div class="bookshelf-empty">还没有书，上传一本 epub 开始阅读吧</div>';return}d.books.forEach(b=>{const item=document.createElement('div');item.className='book-item';item.innerHTML=`<div class="book-icon">📕</div><div class="book-info"><div class="btitle">${escapeHtml(b.title)}</div><div class="btime">${fmtTime(b.time)}</div></div>`;item.onclick=()=>openReader(b.id,b.title);const del=document.createElement('button');del.className='book-del';del.textContent='✕';del.onclick=e=>{e.stopPropagation();deleteBook(b.id)};item.appendChild(del);g.appendChild(item)})}catch(e){}}
+async function uploadBook(file){if(!file)return;const fd=new FormData();fd.append('file',file);try{const r=await fetch('/api/books/upload',{method:'POST',body:fd});const d=await r.json();if(d.error){alert(d.error);return}loadBookshelf()}catch(e){alert('上传失败')}}
+async function deleteBook(id){try{await fetch(`/api/books/${id}`,{method:'DELETE'});loadBookshelf()}catch(e){}}
 
 async function openReader(bookId,title){
     currentBook=bookId;$('readerTitle').textContent=title;
-    $('bookshelfPanel').style.display='none';$('readerPanel').style.display='flex';$('readerPanel').style.flexDirection='column';$('readerPanel').style.height='100%';
-    $('readerWrap').innerHTML='';
-    epubBook=ePub(`/api/books/${bookId}/file`);
-    await new Promise(r=>setTimeout(r,100));const wrapH=$('readerWrap').clientHeight||window.innerHeight-120;rendition=epubBook.renderTo('readerWrap',{width:'100%',height:wrapH+'px',flow:'paginated',spread:'none'});
-    rendition.themes.override('color','#e5ddd0');rendition.themes.override('background','#1a1612');rendition.hooks.content.register(function(contents){var b=contents.document.body;b.style.cssText='background:#1a1612!important;color:#e5ddd0!important;font-family:Noto Serif SC,serif!important;line-height:1.8!important;padding:0 12px!important';var all=contents.document.querySelectorAll('*');for(var i=0;i<all.length;i++){all[i].style.color='#e5ddd0';all[i].style.background='transparent'}});
-    // Load saved progress
-    try{const r=await fetch(`/api/reading/progress/${bookId}`);const d=await r.json();if(d.cfi)rendition.display(d.cfi);else rendition.display()}catch(e){rendition.display()}
-    rendition.on('relocated',loc=>{
-        // Save progress
-        fetch('/api/reading/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId,cfi:loc.start.cfi,page:loc.start.displayed.page})}).catch(()=>{});
-        // Get page text
-        try{const contents=rendition.getContents();if(contents.length)currentPageText=contents[0].document.body.innerText||''}catch(e){}
-        // Update page info
-        if(loc.start.displayed)$('pageInfo').textContent=`${loc.start.displayed.page} / ${loc.start.displayed.total}`;
-    });
-    rendition.on('selected',(cfi)=>{
-        epubBook.getRange(cfi).then(range=>{
-            selectedText=range.toString();if(selectedText.length>5)$('highlightBar').classList.add('show');
-        }).catch(()=>{});
-    });
-    rendition.on('click',()=>{$('highlightBar').classList.remove('show')});
-    startAutoComment();
+    $('bookshelfPanel').style.display='none';
+    $('readerPanel').style.display='flex';$('readerPanel').style.flexDirection='column';$('readerPanel').style.height='100%';
+    $('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:#8a7e6e">正在加载...</div>';
+    try{
+        // 先下载 epub 文件为 ArrayBuffer
+        const resp=await fetch(`/api/books/${bookId}/file`);
+        const buf=await resp.arrayBuffer();
+        $('readerWrap').innerHTML='';
+        await new Promise(r=>setTimeout(r,200));
+        const wrapH=$('readerWrap').clientHeight||window.innerHeight-120;
+        epubBook=ePub(buf);
+        rendition=epubBook.renderTo('readerWrap',{width:'100%',height:wrapH+'px',flow:'paginated',spread:'none'});
+        // 注入暗色样式到 epub iframe
+        rendition.hooks.content.register(function(contents){
+            var b=contents.document.body;
+            b.style.cssText='background:#1a1612!important;color:#e5ddd0!important;font-family:serif!important;line-height:1.8!important;padding:8px 16px!important';
+            var all=b.querySelectorAll('*');
+            for(var i=0;i<all.length;i++){
+                var el=all[i];
+                el.style.color='#e5ddd0';
+                el.style.backgroundColor='transparent';
+            }
+            var links=b.querySelectorAll('a');
+            for(var j=0;j<links.length;j++) links[j].style.color='#e8c87a';
+            var heads=b.querySelectorAll('h1,h2,h3,h4,h5,h6');
+            for(var k=0;k<heads.length;k++) heads[k].style.color='#e8c87a';
+        });
+        // 恢复阅读进度
+        try{const pr=await fetch(`/api/reading/progress/${bookId}`);const d=await pr.json();if(d.cfi)rendition.display(d.cfi);else rendition.display()}catch(e){rendition.display()}
+        // 翻页事件
+        rendition.on('relocated',loc=>{
+            fetch('/api/reading/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId,cfi:loc.start.cfi,page:loc.start.displayed?loc.start.displayed.page:0})}).catch(()=>{});
+            try{var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''}catch(e){}
+            if(loc.start.displayed)$('pageInfo').textContent=loc.start.displayed.page+' / '+loc.start.displayed.total;
+        });
+        // 选中文字
+        rendition.on('selected',cfi=>{epubBook.getRange(cfi).then(range=>{selectedText=range.toString();if(selectedText.length>5)$('highlightBar').classList.add('show')}).catch(()=>{})});
+        rendition.on('click',()=>{$('highlightBar').classList.remove('show')});
+        startAutoComment();
+    }catch(e){
+        $('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:#d4956a">加载失败: '+escapeHtml(e.message)+'</div>';
+    }
 }
 
-function closeReader(){
-    stopAutoComment();if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';
-    $('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');
-    hideComment();$('highlightBar').classList.remove('show');
-}
+function closeReader(){stopAutoComment();if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';$('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');hideComment();$('highlightBar').classList.remove('show')}
 function prevPage(){if(rendition)rendition.prev()}
 function nextPage(){if(rendition)rendition.next()}
 function toggleSettings(){$('readerSettings').classList.toggle('show')}
 function updateInterval(v){commentMinutes=parseInt(v);if(commentMinutes>0)startAutoComment();else stopAutoComment()}
 function updateFontSize(v){if(rendition)rendition.themes.fontSize(v+'%')}
-
 function startAutoComment(){stopAutoComment();if(commentMinutes<=0||!currentBook)return;commentTimer=setInterval(()=>{if(currentPageText)requestComment(currentPageText)},commentMinutes*60*1000)}
 function stopAutoComment(){if(commentTimer){clearInterval(commentTimer);commentTimer=null}}
 
-async function requestComment(text){
-    try{const r=await fetch('/api/reading/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,page_text:text,model:currentModel})});
-    const d=await r.json();showComment(d.comment,d.tokens)}catch(e){}
-}
-
-async function sendHighlight(){
-    $('highlightBar').classList.remove('show');if(!selectedText||!currentBook)return;
-    try{const r=await fetch('/api/reading/highlight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,selected_text:selectedText,model:currentModel})});
-    const d=await r.json();showComment(d.comment,d.tokens);selectedText=''}catch(e){}
-}
-
-function showComment(text,tokens){
-    $('commentText').textContent=text;
-    $('commentTokens').textContent=tokens?`${tokens.model||''} · 输入 ${fmtTk(tokens.input)} · 输出 ${fmtTk(tokens.output)}`:'';
-    $('commentBubble').classList.add('show');
-    setTimeout(()=>{if($('commentBubble').classList.contains('show'))hideComment()},15000);
-}
+async function requestComment(text){try{const r=await fetch('/api/reading/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,page_text:text,model:currentModel})});const d=await r.json();showComment(d.comment,d.tokens)}catch(e){}}
+async function sendHighlight(){$('highlightBar').classList.remove('show');if(!selectedText||!currentBook)return;try{const r=await fetch('/api/reading/highlight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,selected_text:selectedText,model:currentModel})});const d=await r.json();showComment(d.comment,d.tokens);selectedText=''}catch(e){}}
+function showComment(text,tokens){$('commentText').textContent=text;$('commentTokens').textContent=tokens?`${tokens.model||''} · 输入 ${fmtTk(tokens.input)} · 输出 ${fmtTk(tokens.output)}`:'';$('commentBubble').classList.add('show');setTimeout(()=>{if($('commentBubble').classList.contains('show'))hideComment()},15000)}
 function hideComment(){$('commentBubble').classList.remove('show')}
 
-// ═══ INIT ═══
 initChat();
 </script>
 </body>
