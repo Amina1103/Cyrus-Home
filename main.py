@@ -1037,6 +1037,13 @@ async def push_unsubscribe(req: dict):
     c = get_db(); c.execute("DELETE FROM push_subscriptions WHERE endpoint=?", (endpoint,)); c.commit(); c.close()
     return {"ok": True}
 
+@app.get("/api/push/test")
+async def push_test():
+    c = get_db(); n = c.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0]; c.close()
+    if not n: return {"ok": False, "message": "no subscriptions"}
+    await send_push_notification(title="Cyrus", body="测试推送", url="/")
+    return {"ok": True, "message": "push sent"}
+
 @app.get("/api/keepalive/logs")
 async def keepalive_logs_for_day(date: str = None):
     if not date: date = _beijing_now().strftime("%Y-%m-%d")
