@@ -261,6 +261,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS diaries (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'open', created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL UNIQUE, keys_json TEXT NOT NULL, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS thinking_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, message_content TEXT DEFAULT '', thinking_content TEXT NOT NULL, created_at REAL NOT NULL);
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
@@ -521,6 +522,40 @@ async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 @app.get("/api/sessions/{sid}/export")
 async def export_session(sid:str):
     return JSONResponse(content={"session_id":sid,"exported_at":time.time(),"messages":db_get_messages(sid)},headers={"Content-Disposition":f"attachment; filename=cyrus-chat-{sid}.json"})
+
+# ══ Thinking bookmarks ══
+class ThinkingBookmarkRequest(BaseModel):
+    session_id: str
+    message_content: str = ""
+    thinking_content: str
+
+@app.post("/api/thinking/bookmark")
+async def create_thinking_bookmark(req: ThinkingBookmarkRequest):
+    if not req.thinking_content.strip(): return {"ok": False, "error": "empty thinking"}
+    c = get_db()
+    cur = c.execute(
+        "INSERT INTO thinking_bookmarks(session_id, message_content, thinking_content, created_at) VALUES(?,?,?,?)",
+        (req.session_id, (req.message_content or "")[:500], req.thinking_content, time.time()),
+    )
+    c.commit()
+    bid = cur.lastrowid
+    c.close()
+    return {"ok": True, "id": bid}
+
+@app.get("/api/thinking/bookmarks")
+async def list_thinking_bookmarks(session_id: str):
+    c = get_db()
+    rows = c.execute(
+        "SELECT id, message_content, thinking_content, created_at FROM thinking_bookmarks WHERE session_id=? ORDER BY created_at DESC",
+        (session_id,),
+    ).fetchall()
+    c.close()
+    return {"bookmarks": [dict(r) for r in rows]}
+
+@app.delete("/api/thinking/bookmark/{bid}")
+async def delete_thinking_bookmark(bid: int):
+    c = get_db(); c.execute("DELETE FROM thinking_bookmarks WHERE id=?", (bid,)); c.commit(); c.close()
+    return {"ok": True}
 
 # ══ Chat (SSE) ══
 class ChatRequest(BaseModel):
