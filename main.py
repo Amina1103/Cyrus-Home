@@ -456,8 +456,10 @@ async def lifespan(app):
         c.close()
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
     scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
+    scheduler.add_job(cache_warmup_sync, 'interval', minutes=5, id='cache_warmup', max_instances=1)
     scheduler.start()
     print("Keepalive scheduler started")
+    print("Cache warmup scheduler started")
     yield
     scheduler.shutdown()
 
@@ -930,6 +932,36 @@ def keepalive_check_sync():
         asyncio.ensure_future(keepalive_check())
     else:
         loop.run_until_complete(keepalive_check())
+
+async def cache_warmup():
+    try:
+        now_bj = _beijing_now()
+        hour = now_bj.hour
+        if not (hour >= 11 or hour < 3): return
+        idle = time.time() - last_chat_time
+        if idle < 2700 or idle > 3300: return
+        sys_blocks = build_system_blocks()
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1,
+            system=sys_blocks,
+            messages=[{"role":"user","content":"ping"}],
+        )
+        u = resp.usage
+        cr = getattr(u, "cache_read_input_tokens", 0) or 0
+        cc = getattr(u, "cache_creation_input_tokens", 0) or 0
+        status = "hit" if cr > 0 else "miss"
+        print(f"Cache warmup: {status} (read={cr}, creation={cc}, input={u.input_tokens}, output={u.output_tokens})")
+    except Exception as e:
+        print(f"Cache warmup error: {e}")
+
+def cache_warmup_sync():
+    import asyncio
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        asyncio.ensure_future(cache_warmup())
+    else:
+        loop.run_until_complete(cache_warmup())
 
 @app.get("/api/keepalive/toggle")
 async def get_keepalive_toggle():
