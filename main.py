@@ -217,6 +217,10 @@ async def list_sessions(): return {"sessions":db_list_sessions()}
 async def create_session(): return {"session_id":db_create_session()}
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid:str): db_delete_session(sid); return {"ok":True}
+@app.delete("/api/sessions/{sid}/messages_after")
+async def delete_messages_after(sid:str, created_at:float):
+    c=get_db(); c.execute("DELETE FROM messages WHERE session_id=? AND created_at>=?",(sid,created_at)); c.commit(); c.close()
+    return {"ok":True}
 @app.get("/api/sessions/{sid}")
 async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 @app.get("/api/sessions/{sid}/export")
@@ -234,7 +238,9 @@ async def chat_stream(req):
     c=get_db()
     if not c.execute("SELECT id FROM sessions WHERE id=?",(req.session_id,)).fetchone():
         c.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)",(req.session_id,time.time())); c.commit()
-    c.close(); db_add_message(req.session_id,"user",req.message or "[图片]")
+    c.close()
+    ut=db_add_message(req.session_id,"user",req.message or "[图片]")
+    yield sse({"type":"user_time","time":ut})
     yield sse({"type":"status","text":"正在思考..."})
     recent=db_get_recent_messages(req.session_id,20)
     if req.images:
@@ -245,33 +251,46 @@ async def chat_stream(req):
     kw=dict(model=model,max_tokens=16000 if req.thinking else 1024,system=build_system_prompt(req.session_id),messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
-    resp=client.messages.create(**kw); ti,to=resp.usage.input_tokens,resp.usage.output_tokens
-    tp,tc=[],[]
-    while resp.stop_reason=="tool_use":
-        recent.append({"role":"assistant","content":serialize_blocks(resp.content)})
-        for b in resp.content:
-            if b.type=="thinking": tp.append(b.thinking)
-        tr=[]
-        for b in resp.content:
-            if b.type=="tool_use":
-                nm={"web_search":"搜索","web_fetch":"抓取网页","github_read":"读取代码","breath":"查记忆","dream":"联想","hold":"存记忆","grow":"导入","trace":"修改"}
-                yield sse({"type":"status","text":f"正在{nm.get(b.name,b.name)}..."})
-                try: rt=await execute_tool(b.name,b.input)
-                except Exception as e: rt=f"失败: {e}"
-                tc.append({"name":b.name,"input":b.input,"result_preview":rt[:200]})
-                tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
-        recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
-        kw["messages"]=recent; resp=client.messages.create(**kw); ti+=resp.usage.input_tokens; to+=resp.usage.output_tokens
-    reply=""
-    for b in resp.content:
-        if b.type=="thinking": tp.append(b.thinking)
-        elif hasattr(b,"text"): reply+=b.text
-    rt=db_add_message(req.session_id,"assistant",reply)
-    if tc: yield sse({"type":"tools","calls":tc})
-    if tp: yield sse({"type":"thinking","content":"\n\n".join(tp)})
-    yield sse({"type":"reply","content":reply,"time":rt})
-    md={"claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-6":"Opus 4.6"}
-    yield sse({"type":"done","tokens":{"input":ti,"output":to,"model":md.get(model,model)}})
+    ti,to=0,0; tp,tc=[],[]; accumulated=""; saved=False
+    try:
+        while True:
+            with client.messages.stream(**kw) as stream:
+                for event in stream:
+                    et=getattr(event,"type",None)
+                    if et=="content_block_delta":
+                        d=event.delta; dt=getattr(d,"type",None)
+                        if dt=="thinking_delta":
+                            yield sse({"type":"thinking_delta","text":d.thinking})
+                        elif dt=="text_delta":
+                            accumulated+=d.text
+                            yield sse({"type":"text_delta","text":d.text})
+                final_msg=stream.get_final_message()
+            ti+=final_msg.usage.input_tokens; to+=final_msg.usage.output_tokens
+            for b in final_msg.content:
+                if b.type=="thinking": tp.append(b.thinking)
+            if final_msg.stop_reason!="tool_use": break
+            recent.append({"role":"assistant","content":serialize_blocks(final_msg.content)})
+            tr=[]
+            for b in final_msg.content:
+                if b.type=="tool_use":
+                    nm={"web_search":"搜索","web_fetch":"抓取网页","github_read":"读取代码","breath":"查记忆","dream":"联想","hold":"存记忆","grow":"导入","trace":"修改"}
+                    yield sse({"type":"status","text":f"正在{nm.get(b.name,b.name)}..."})
+                    try: rt=await execute_tool(b.name,b.input)
+                    except Exception as e: rt=f"失败: {e}"
+                    tc.append({"name":b.name,"input":b.input,"result_preview":rt[:200]})
+                    tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
+            recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
+            kw["messages"]=recent
+        rt=db_add_message(req.session_id,"assistant",accumulated); saved=True
+        if tc: yield sse({"type":"tools","calls":tc})
+        if tp: yield sse({"type":"thinking","content":"\n\n".join(tp)})
+        yield sse({"type":"reply","content":accumulated,"time":rt})
+        md={"claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-6":"Opus 4.6"}
+        yield sse({"type":"done","tokens":{"input":ti,"output":to,"model":md.get(model,model)}})
+    finally:
+        if not saved and accumulated:
+            try: db_add_message(req.session_id,"assistant",accumulated+"\n\n[已停止]")
+            except: pass
     try: await maybe_generate_summary(req.session_id)
     except: pass
 
