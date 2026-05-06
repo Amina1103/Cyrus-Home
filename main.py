@@ -1182,3 +1182,6 @@ async def get_reading_comments(bid:str):
 
 @app.get("/")
 async def root(): return FileResponse("frontend/index.html")
+
+@app.get("/sw.js")
+async def service_worker(): return FileResponse("frontend/sw.js", media_type="application/javascript")
