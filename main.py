@@ -975,16 +975,17 @@ async def set_keepalive_toggle(req: dict):
     return {"ok": True, "enabled": v == "true"}
 
 # ══ Web Push ══
-async def send_push_notification(title, body, url="/"):
+async def send_push_notification(title, body, url="/", force=False):
     if not VAPID_PRIVATE_KEY:
         print("⚠ push skipped: no VAPID key"); return
     c = get_db()
-    last = c.execute("SELECT value FROM settings WHERE key='last_push_time'").fetchone()
-    if last:
-        try:
-            if time.time() - float(last["value"]) < 7200:
-                c.close(); return
-        except: pass
+    if not force:
+        last = c.execute("SELECT value FROM settings WHERE key='last_push_time'").fetchone()
+        if last:
+            try:
+                if time.time() - float(last["value"]) < 7200:
+                    c.close(); return
+            except: pass
     subs = c.execute("SELECT id, endpoint, keys_json FROM push_subscriptions").fetchall()
     c.close()
     if not subs: return
@@ -1041,7 +1042,7 @@ async def push_unsubscribe(req: dict):
 async def push_test():
     c = get_db(); n = c.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0]; c.close()
     if not n: return {"ok": False, "message": "no subscriptions"}
-    await send_push_notification(title="Cyrus", body="测试推送", url="/")
+    await send_push_notification(title="Cyrus", body="测试推送", url="/", force=True)
     return {"ok": True, "message": "push sent"}
 
 @app.get("/api/keepalive/logs")
