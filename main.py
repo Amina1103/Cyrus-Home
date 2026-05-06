@@ -455,24 +455,14 @@ async def lifespan(app):
     except Exception as e: print(f"⚠ Pinned 记忆加载失败: {e}")
     try:
         c = get_db()
-        pub_row = c.execute("SELECT value FROM settings WHERE key='vapid_public_key'").fetchone()
-        priv_row = c.execute("SELECT value FROM settings WHERE key='vapid_private_key'").fetchone()
-        valid = bool(pub_row and priv_row and _validate_vapid_pem(priv_row["value"]))
-        if valid:
-            VAPID_PUBLIC_KEY = pub_row["value"]; VAPID_PRIVATE_KEY = priv_row["value"]
-            print("✓ VAPID 密钥已加载")
-        else:
-            if pub_row or priv_row:
-                c.execute("DELETE FROM settings WHERE key IN ('vapid_public_key','vapid_private_key')")
-                c.commit()
-                print("⚠ VAPID 密钥格式失效，已清除")
-            priv_pem, pub_b64u = _generate_vapid_keys()
-            VAPID_PRIVATE_KEY = priv_pem; VAPID_PUBLIC_KEY = pub_b64u
-            c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
-            c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_pem, priv_pem))
-            c.commit()
-            print("✓ VAPID 密钥已生成")
-        c.close()
+        c.execute("DELETE FROM settings WHERE key IN ('vapid_public_key','vapid_private_key')")
+        c.commit()
+        priv_pem, pub_b64u = _generate_vapid_keys()
+        VAPID_PRIVATE_KEY = priv_pem; VAPID_PUBLIC_KEY = pub_b64u
+        c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
+        c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_pem, priv_pem))
+        c.commit(); c.close()
+        print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
     scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
     scheduler.add_job(cache_warmup_sync, 'interval', minutes=5, id='cache_warmup', max_instances=1)
@@ -1009,6 +999,7 @@ async def send_push_notification(title, body, url="/", force=False):
     c.close()
     if not subs: return
     payload = json.dumps({"title": title, "body": body, "url": url})
+    print(f"DEBUG VAPID priv[:30]={VAPID_PRIVATE_KEY[:30]!r} pub={VAPID_PUBLIC_KEY}")
     sent = False
     def _push(sub_info):
         return webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_SUB})
