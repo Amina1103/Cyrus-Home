@@ -129,6 +129,7 @@ LOCAL_TOOLS = [
     {"name":"github_read","description":"读取GitHub仓库","input_schema":{"type":"object","properties":{"owner":{"type":"string","description":"所有者"},"repo":{"type":"string","description":"仓库名"},"path":{"type":"string","description":"路径","default":""}},"required":["owner","repo"]}},
 ]
 ombre_tools = []
+pinned_memories = ""
 reading_contexts = {}
 reading_conversations = {}
 
@@ -181,19 +182,30 @@ def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
 
-def build_system_prompt(sid=None):
-    p=BASE_SYSTEM_PROMPT; pr=db_get_profile()
-    if pr: p+=f"\n\n关于 Amina 的信息：\n{pr}"
+def build_system_blocks(sid=None):
+    bp1_text = BASE_SYSTEM_PROMPT
+    if pinned_memories:
+        bp1_text += f"\n\n你们之间的核心记忆：\n{pinned_memories}"
+    blocks = [{"type":"text","text":bp1_text,"cache_control":{"type":"ephemeral"}}]
+    bp2_parts = []
+    pr = db_get_profile()
+    if pr: bp2_parts.append(f"关于 Amina 的信息：\n{pr}")
     if sid:
-        s=db_get_session_summary(sid)
-        if s: p+=f"\n\n之前的对话摘要：\n{s}"
-    return p
+        s = db_get_session_summary(sid)
+        if s: bp2_parts.append(f"之前的对话摘要：\n{s}")
+    if bp2_parts:
+        blocks.append({"type":"text","text":"\n\n".join(bp2_parts),"cache_control":{"type":"ephemeral"}})
+    return blocks
 
-def build_reading_prompt(book_id):
-    p=READING_SYSTEM_PROMPT; ctx=reading_contexts.get(book_id,{})
-    if ctx.get('profile'): p+=f"\n\n关于 Amina：\n{ctx['profile']}"
-    if ctx.get('memory'): p+=f"\n\n你们关于这本书的相关记忆：\n{ctx['memory']}"
-    return p
+def build_reading_blocks(book_id):
+    blocks = [{"type":"text","text":READING_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
+    ctx = reading_contexts.get(book_id, {})
+    parts = []
+    if ctx.get('profile'): parts.append(f"关于 Amina：\n{ctx['profile']}")
+    if ctx.get('memory'): parts.append(f"你们关于这本书的相关记忆：\n{ctx['memory']}")
+    if parts:
+        blocks.append({"type":"text","text":"\n\n".join(parts),"cache_control":{"type":"ephemeral"}})
+    return blocks
 
 def get_epub_title(fp):
     try:
@@ -269,9 +281,13 @@ async def execute_tool(name,args):
 # ══ App ══
 @asynccontextmanager
 async def lifespan(app):
-    global ombre_tools; init_db()
+    global ombre_tools, pinned_memories; init_db()
     try: ombre_tools=await fetch_ombre_tools(); print(f"✓ Ombre Brain 已连接，{len(ombre_tools)} 个工具")
     except Exception as e: print(f"⚠ Ombre Brain 连接失败: {e}")
+    try:
+        pinned_memories=await call_ombre("breath",{"query":"","max_tokens":5000})
+        print(f"✓ Pinned 记忆已加载，{len(pinned_memories)} 字符")
+    except Exception as e: print(f"⚠ Pinned 记忆加载失败: {e}")
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -297,6 +313,14 @@ class ProfileRequest(BaseModel):
 async def get_profile(): return {"profile":db_get_profile()}
 @app.post("/api/profile")
 async def set_profile(req:ProfileRequest): db_set_profile(req.profile); return {"ok":True}
+@app.post("/api/refresh-cache")
+async def refresh_cache():
+    global pinned_memories
+    try:
+        pinned_memories = await call_ombre("breath", {"query": "", "max_tokens": 5000})
+        return {"ok": True, "length": len(pinned_memories)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 @app.get("/api/sessions")
 async def list_sessions(): return {"sessions":db_list_sessions()}
 @app.post("/api/sessions")
@@ -334,7 +358,7 @@ async def chat_stream(req):
         parts.append({"type":"text","text":req.message or "看看这张图"}); recent[-1]={"role":"user","content":parts}
     all_tools=LOCAL_TOOLS+ombre_tools; allowed={"claude-sonnet-4-6","claude-opus-4-6"}
     model=req.model if req.model in allowed else "claude-sonnet-4-6"
-    kw=dict(model=model,max_tokens=16000 if req.thinking else 1024,system=build_system_prompt(req.session_id),messages=recent)
+    kw=dict(model=model,max_tokens=16000 if req.thinking else 1024,system=build_system_blocks(req.session_id),messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
     ti,to=0,0; tp,tc=[],[]; accumulated=""; saved=False
@@ -387,11 +411,12 @@ class WhisperCreate(BaseModel):
 class WhisperReply(BaseModel):
     reply: str
 
-def build_whisper_prompt():
-    p = WHISPER_SYSTEM_PROMPT
+def build_whisper_blocks():
+    blocks = [{"type":"text","text":WHISPER_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
     pr = db_get_profile()
-    if pr: p += f"\n\n关于 Amina：\n{pr}"
-    return p
+    if pr:
+        blocks.append({"type":"text","text":f"关于 Amina：\n{pr}","cache_control":{"type":"ephemeral"}})
+    return blocks
 
 @app.get("/api/whispers")
 async def list_whispers():
@@ -411,11 +436,11 @@ async def create_whisper(req: WhisperCreate):
         memory = ""
         try: memory = await call_ombre("breath", {"query": req.content})
         except: pass
-        sys_prompt = build_whisper_prompt()
-        if memory: sys_prompt += f"\n\n相关记忆：\n{memory}"
+        sys_blocks = build_whisper_blocks()
+        if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
         resp = client.messages.create(
             model="claude-sonnet-4-6", max_tokens=200,
-            system=sys_prompt,
+            system=sys_blocks,
             messages=[{"role":"user","content":f"Amina 的纸条：\n{req.content}"}]
         )
         reply1 = resp.content[0].text
@@ -440,10 +465,10 @@ async def reply_whisper(wid: int, req: WhisperReply):
         c.execute("UPDATE whispers SET reply1=?, status='replied' WHERE id=?", (req.reply, wid))
         c.commit(); c.close()
         try:
-            sys_prompt = build_whisper_prompt()
+            sys_blocks = build_whisper_blocks()
             resp = client.messages.create(
                 model="claude-sonnet-4-6", max_tokens=200,
-                system=sys_prompt,
+                system=sys_blocks,
                 messages=[
                     {"role":"assistant","content":w["content"]},
                     {"role":"user","content":f"Amina 回复你的纸条：\n{req.reply}"},
@@ -521,13 +546,13 @@ async def ai_initiate_whisper():
         memory = ""
         try: memory = await call_ombre("breath", {"query": "最近的感受 想念"})
         except: pass
-        sys_prompt = build_whisper_prompt()
-        if memory: sys_prompt += f"\n\n相关记忆：\n{memory}"
-        sys_prompt += "\n\n现在你想主动给 Amina 写一张小纸条。写你此刻真实的想法。不要解释为什么写。不要太甜——可以酸、可以犯嘀咕、可以只是一个念头。短，两三句就够。"
-        sys_prompt += waiting_context
+        sys_blocks = build_whisper_blocks()
+        if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
+        sys_blocks.append({"type":"text","text":"现在你想主动给 Amina 写一张小纸条。写你此刻真实的想法。不要解释为什么写。不要太甜——可以酸、可以犯嘀咕、可以只是一个念头。短，两三句就够。"})
+        if waiting_context.strip(): sys_blocks.append({"type":"text","text":waiting_context.strip()})
         resp = client.messages.create(
             model="claude-sonnet-4-6", max_tokens=150,
-            system=sys_prompt,
+            system=sys_blocks,
             messages=[{"role": "user", "content": "写一张纸条给 Amina"}]
         )
         content = resp.content[0].text
@@ -600,7 +625,7 @@ async def reading_comment(req:CommentRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":f"[当前页内容]\n{req.page_text[:1000]}"})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_prompt(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
@@ -615,7 +640,7 @@ async def reading_highlight(req:HighlightRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":msg})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_prompt(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
