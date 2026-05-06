@@ -419,6 +419,31 @@ async def execute_tool(name,args):
     else: return await call_ombre(name,args)
 
 # ══ App ══
+def _generate_vapid_keys():
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    priv = ec.generate_private_key(ec.SECP256R1())
+    priv_pem = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    pub_raw = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    pub_b64u = base64.urlsafe_b64encode(pub_raw).rstrip(b"=").decode()
+    return priv_pem, pub_b64u
+
+def _validate_vapid_pem(pem_str):
+    try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        priv = serialization.load_pem_private_key(pem_str.encode(), password=None)
+        return isinstance(priv, ec.EllipticCurvePrivateKey) and isinstance(priv.curve, ec.SECP256R1)
+    except Exception:
+        return False
+
 @asynccontextmanager
 async def lifespan(app):
     global ombre_tools, pinned_memories, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY; init_db()
@@ -432,25 +457,19 @@ async def lifespan(app):
         c = get_db()
         pub_row = c.execute("SELECT value FROM settings WHERE key='vapid_public_key'").fetchone()
         priv_row = c.execute("SELECT value FROM settings WHERE key='vapid_private_key'").fetchone()
-        if pub_row and priv_row:
+        valid = bool(pub_row and priv_row and _validate_vapid_pem(priv_row["value"]))
+        if valid:
             VAPID_PUBLIC_KEY = pub_row["value"]; VAPID_PRIVATE_KEY = priv_row["value"]
             print("✓ VAPID 密钥已加载")
         else:
-            from py_vapid import Vapid
-            from cryptography.hazmat.primitives import serialization
-            v = Vapid(); v.generate_keys()
-            VAPID_PRIVATE_KEY = v.private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).decode()
-            pub_raw = v.public_key.public_bytes(
-                encoding=serialization.Encoding.X962,
-                format=serialization.PublicFormat.UncompressedPoint,
-            )
-            VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(pub_raw).rstrip(b"=").decode()
-            c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (VAPID_PUBLIC_KEY, VAPID_PUBLIC_KEY))
-            c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (VAPID_PRIVATE_KEY, VAPID_PRIVATE_KEY))
+            if pub_row or priv_row:
+                c.execute("DELETE FROM settings WHERE key IN ('vapid_public_key','vapid_private_key')")
+                c.commit()
+                print("⚠ VAPID 密钥格式失效，已清除")
+            priv_pem, pub_b64u = _generate_vapid_keys()
+            VAPID_PRIVATE_KEY = priv_pem; VAPID_PUBLIC_KEY = pub_b64u
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_pem, priv_pem))
             c.commit()
             print("✓ VAPID 密钥已生成")
         c.close()
