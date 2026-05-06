@@ -423,26 +423,14 @@ def _generate_vapid_keys():
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.hazmat.primitives import serialization
     priv = ec.generate_private_key(ec.SECP256R1())
-    priv_pem = priv.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
+    raw_private = priv.private_numbers().private_value.to_bytes(32, "big")
+    priv_b64 = base64.urlsafe_b64encode(raw_private).rstrip(b"=").decode()
     pub_raw = priv.public_key().public_bytes(
         encoding=serialization.Encoding.X962,
         format=serialization.PublicFormat.UncompressedPoint,
     )
     pub_b64u = base64.urlsafe_b64encode(pub_raw).rstrip(b"=").decode()
-    return priv_pem, pub_b64u
-
-def _validate_vapid_pem(pem_str):
-    try:
-        from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.primitives import serialization
-        priv = serialization.load_pem_private_key(pem_str.encode(), password=None)
-        return isinstance(priv, ec.EllipticCurvePrivateKey) and isinstance(priv.curve, ec.SECP256R1)
-    except Exception:
-        return False
+    return priv_b64, pub_b64u
 
 @asynccontextmanager
 async def lifespan(app):
@@ -457,10 +445,10 @@ async def lifespan(app):
         c = get_db()
         c.execute("DELETE FROM settings WHERE key IN ('vapid_public_key','vapid_private_key')")
         c.commit()
-        priv_pem, pub_b64u = _generate_vapid_keys()
-        VAPID_PRIVATE_KEY = priv_pem; VAPID_PUBLIC_KEY = pub_b64u
+        priv_b64, pub_b64u = _generate_vapid_keys()
+        VAPID_PRIVATE_KEY = priv_b64; VAPID_PUBLIC_KEY = pub_b64u
         c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
-        c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_pem, priv_pem))
+        c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_b64, priv_b64))
         c.commit(); c.close()
         print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
