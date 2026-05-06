@@ -779,6 +779,19 @@ def _beijing_today_start_ts():
     n = _beijing_now()
     return n.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
+def _bj_day_range(date_str):
+    y, m, d = map(int, date_str.split("-"))
+    bj = timezone(timedelta(hours=8))
+    start = datetime(y, m, d, 0, 0, 0, tzinfo=bj)
+    return start.timestamp(), (start + timedelta(days=1)).timestamp()
+
+def _bj_month_range(month_str):
+    y, m = map(int, month_str.split("-"))
+    bj = timezone(timedelta(hours=8))
+    start = datetime(y, m, 1, 0, 0, 0, tzinfo=bj)
+    end = datetime(y+1, 1, 1, 0, 0, 0, tzinfo=bj) if m == 12 else datetime(y, m+1, 1, 0, 0, 0, tzinfo=bj)
+    return start.timestamp(), end.timestamp()
+
 async def keepalive_check():
     try:
         now_bj = _beijing_now()
@@ -894,6 +907,61 @@ async def set_keepalive_toggle(req: dict):
     v = "true" if req.get("enabled", True) else "false"
     c = get_db(); c.execute("INSERT INTO settings(key,value) VALUES('keepalive_enabled',?) ON CONFLICT(key) DO UPDATE SET value=?", (v, v)); c.commit(); c.close()
     return {"ok": True, "enabled": v == "true"}
+
+@app.get("/api/keepalive/logs")
+async def keepalive_logs_for_day(date: str = None):
+    if not date: date = _beijing_now().strftime("%Y-%m-%d")
+    start, end = _bj_day_range(date)
+    c = get_db()
+    rows = c.execute("SELECT id, thoughts, action, content, created_at FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
+    c.close()
+    logs = [{
+        "id": r["id"],
+        "thoughts": r["thoughts"],
+        "action": r["action"],
+        "content": r["content"] or "",
+        "time": time.strftime("%H:%M", time.gmtime(r["created_at"] + 8*3600)),
+    } for r in rows]
+    return {"date": date, "logs": logs}
+
+@app.get("/api/diary")
+async def diary_get(date: str = None):
+    bj = timezone(timedelta(hours=8))
+    c = get_db()
+    if date:
+        start, end = _bj_day_range(date)
+        rows = c.execute("SELECT id, content, created_at FROM diaries WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
+        c.close()
+        return {"diaries": [{"id": r["id"], "content": r["content"], "time": time.strftime("%H:%M", time.gmtime(r["created_at"] + 8*3600))} for r in rows]}
+    today = _beijing_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff = (today - timedelta(days=30)).timestamp()
+    rows = c.execute("SELECT created_at FROM diaries WHERE created_at>=? ORDER BY created_at DESC", (cutoff,)).fetchall()
+    c.close()
+    seen, seen_set = [], set()
+    for r in rows:
+        d = datetime.fromtimestamp(r["created_at"], tz=bj).strftime("%Y-%m-%d")
+        if d not in seen_set:
+            seen.append(d); seen_set.add(d)
+    return {"dates": seen}
+
+@app.get("/api/keepalive/calendar")
+async def keepalive_calendar(month: str):
+    start, end = _bj_month_range(month)
+    bj = timezone(timedelta(hours=8))
+    c = get_db()
+    rows = c.execute("SELECT action, created_at FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
+    c.close()
+    days = {}
+    for r in rows:
+        d = datetime.fromtimestamp(r["created_at"], tz=bj).strftime("%Y-%m-%d")
+        if d not in days:
+            days[d] = {"count": 0, "has_diary": False, "has_message": False, "has_whisper": False}
+        days[d]["count"] += 1
+        a = r["action"]
+        if a == "diary": days[d]["has_diary"] = True
+        elif a == "message": days[d]["has_message"] = True
+        elif a == "whisper": days[d]["has_whisper"] = True
+    return {"days": days}
 
 # ══ Books ══
 @app.post("/api/books/upload")
