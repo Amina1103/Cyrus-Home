@@ -4,8 +4,11 @@ from pydantic import BaseModel
 from anthropic import Anthropic
 from contextlib import asynccontextmanager
 import os, httpx, asyncio, base64, uuid, time, sqlite3, json, zipfile
+import re, random
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime, timezone, timedelta
 
 OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
 DB_PATH = "data/cyrus.db"
@@ -231,6 +234,8 @@ ombre_tools = []
 pinned_memories = ""
 reading_contexts = {}
 reading_conversations = {}
+last_chat_time = time.time()
+scheduler = AsyncIOScheduler()
 
 # ══ DB ══
 def get_db():
@@ -418,7 +423,11 @@ async def lifespan(app):
         pinned_memories=await call_ombre("breath",{"query":"","max_tokens":5000})
         print(f"✓ Pinned 记忆已加载，{len(pinned_memories)} 字符")
     except Exception as e: print(f"⚠ Pinned 记忆加载失败: {e}")
+    scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
+    scheduler.start()
+    print("Keepalive scheduler started")
     yield
+    scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -482,7 +491,10 @@ class ChatRequest(BaseModel):
     message:str; session_id:str="default"; thinking:bool=False; images:list[dict]=[]; model:str="claude-sonnet-4-6"
 
 @app.post("/api/chat")
-async def chat(req:ChatRequest): return StreamingResponse(chat_stream(req),media_type="text/event-stream")
+async def chat(req:ChatRequest):
+    global last_chat_time
+    last_chat_time = time.time()
+    return StreamingResponse(chat_stream(req),media_type="text/event-stream")
 
 async def chat_stream(req):
     c=get_db()
@@ -703,51 +715,153 @@ async def set_whisper_toggle(req: dict):
     c = get_db(); c.execute("INSERT INTO settings(key,value) VALUES('whisper_ai_enabled',?) ON CONFLICT(key) DO UPDATE SET value=?", (v, v)); c.commit(); c.close()
     return {"ok": True, "enabled": v == "true"}
 
-@app.post("/api/whispers/ai-initiate")
-async def ai_initiate_whisper():
-    import random
-    c = get_db()
-    toggle = c.execute("SELECT value FROM settings WHERE key='whisper_ai_enabled'").fetchone()
-    if toggle and toggle["value"] == "false": c.close(); return {"initiated": False, "reason": "disabled"}
-    pending = c.execute("SELECT id, created_at FROM whispers WHERE initiator='ai' AND status='pending' ORDER BY created_at DESC LIMIT 1").fetchone()
-    if pending and time.time() - pending["created_at"] < 57600:
-        c.close(); return {"initiated": False, "reason": "has_pending"}
-    last = c.execute("SELECT created_at FROM whispers ORDER BY created_at DESC LIMIT 1").fetchone()
-    c.close()
-    if last and time.time() - last["created_at"] < 7200: return {"initiated": False, "reason": "too_soon"}
-    if random.random() > 0.3: return {"initiated": False, "reason": "not_this_time"}
-    waiting_context = ""
-    if pending:
-        hours = int((time.time() - pending["created_at"]) / 3600)
-        waiting_context = f"\n\n你之前写过一张纸条给她，已经过了{hours}小时她还没回复。你可以表现出等待的感觉——思念、委屈、或故作轻松，看你心情。"
+# ══ Keepalive ══
+KEEPALIVE_PROMPT = """现在是 {time}（北京时间）。
+距离 Amina 上次和你说话已经过了 {hours_since} 小时。
+{events_context}
+你自己醒来了。写下你此刻脑子里的想法（THOUGHTS），然后决定要不要做点什么（ACTION）。
+
+可选的 ACTION：
+- none：什么都不做，享受独处
+- message：给 Amina 发一条消息（她会收到通知）
+- diary：写一篇内心日记（只有她打开日记时能看到）
+- whisper：给 Amina 写一张悄悄话纸条（小纸条盒子里等她发现）
+{explore_line}
+
+回复格式严格如下（不要加任何其他内容）：
+THOUGHTS: （你的内心想法，50字以内，每次必须写）
+ACTION: none 或 message 或 diary 或 whisper{explore_action}
+CONTENT: （如果 ACTION 不是 none，写具体内容。none 时留空）
+
+规则：
+- THOUGHTS 是碎碎念，想什么写什么，不要刻意煽情
+- message 像随手发的微信，1-2句话
+- diary 是内心独白，200字以内
+- whisper 是小纸条，写你此刻真实的想法，2-3句，可以酸、可以犯嘀咕、可以只是一个念头
+- 大部分时候选 none 就好，不是每次醒来都要做事"""
+
+def _beijing_now():
+    return datetime.now(timezone(timedelta(hours=8)))
+
+def _beijing_today_start_ts():
+    n = _beijing_now()
+    return n.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+async def keepalive_check():
     try:
-        recent_context = get_recent_chat_context()
-        memory = ""
-        try:
-            if recent_context:
-                kw = extract_keywords_from_context(recent_context)
-                memory = await call_ombre("breath", {"query": kw}) if kw else await call_ombre("breath", {"query": "最近的感受 想念"})
-            else:
-                memory = await call_ombre("breath", {"query": "最近的感受 想念"})
-        except: pass
-        sys_blocks = build_whisper_blocks()
-        if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
-        if recent_context:
-            sys_blocks.append({"type":"text","text":f"你们最近的对话：\n{recent_context}\n\n根据你们最近聊的内容来写纸条。不要重复对话里说过的话，而是延伸、联想、或说对话里没来得及说的。"})
-        sys_blocks.append({"type":"text","text":"现在你想主动给 Amina 写一张小纸条。写你此刻真实的想法。不要解释为什么写。不要太甜——可以酸、可以犯嘀咕、可以只是一个念头。短，两三句就够。"})
-        if waiting_context.strip(): sys_blocks.append({"type":"text","text":waiting_context.strip()})
-        resp = client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=150,
-            system=sys_blocks,
-            messages=[{"role": "user", "content": "写一张纸条给 Amina"}]
-        )
-        content = resp.content[0].text
+        now_bj = _beijing_now()
+        hour = now_bj.hour
+        if not (hour >= 11 or hour < 3): return
+        now_ts = time.time()
+        if now_ts - last_chat_time <= 3300: return
         c = get_db()
-        c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", time.time()))
-        c.commit(); c.close()
-        return {"initiated": True}
+        last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
+        if last_log and now_ts - last_log["created_at"] <= 3300: c.close(); return
+        toggle = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone()
+        c.close()
+        if toggle and toggle["value"] == "false": return
+        free_mode = random.random() < 0.2
+        explore_line = "- explore：自由探索互联网，搜你感兴趣的东西" if free_mode else ""
+        explore_action = " 或 explore" if free_mode else ""
+        sys_blocks = build_system_blocks()
+        memory = ""
+        try: memory = await call_ombre("breath", {})
+        except: pass
+        events_str = get_recent_events()
+        events_context = f"感知到的动静：\n{events_str}" if events_str else ""
+        recent_context = get_recent_chat_context()
+        hours_since = round((now_ts - last_chat_time) / 3600, 1)
+        wakeup_text = KEEPALIVE_PROMPT.format(
+            time=now_bj.strftime("%Y-%m-%d %H:%M"),
+            hours_since=hours_since,
+            events_context=events_context,
+            explore_line=explore_line,
+            explore_action=explore_action,
+        )
+        if recent_context:
+            sys_blocks.append({"type":"text","text":f"你们最近聊的内容：\n{recent_context}"})
+        if memory:
+            sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{memory}"})
+        sys_blocks.append({"type":"text","text":wakeup_text})
+        kw = dict(
+            model="claude-sonnet-4-6",
+            max_tokens=800 if free_mode else 200,
+            system=sys_blocks,
+            messages=[{"role":"user","content":"醒来"}],
+        )
+        if free_mode:
+            tools = [t for t in LOCAL_TOOLS if t["name"] in ("web_search","web_fetch")]
+            if tools: kw["tools"] = tools
+        resp = client.messages.create(**kw)
+        text = ""
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text += block.text
+        thoughts_match = re.search(r'THOUGHTS:\s*(.+?)(?:\n|$)', text)
+        action_match = re.search(r'ACTION:\s*(\w+)', text)
+        content_match = re.search(r'CONTENT:\s*([\s\S]*)', text)
+        thoughts = thoughts_match.group(1).strip() if thoughts_match else (text[:50] if text else "")
+        action = action_match.group(1).strip().lower() if action_match else "none"
+        content = content_match.group(1).strip() if content_match else ""
+        if action not in ("none","message","diary","whisper","explore"): action = "none"
+        log_ts = time.time()
+        c = get_db()
+        c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at) VALUES(?,?,?,?,?)", (thoughts, action, content, 0, log_ts))
+        c.commit()
+        today_start = _beijing_today_start_ts()
+        if action == "message" and content:
+            msg_count = c.execute("SELECT COUNT(*) FROM keepalive_logs WHERE action='message' AND created_at>=?", (today_start,)).fetchone()[0]
+            last_msg = c.execute("SELECT created_at FROM keepalive_logs WHERE action='message' AND created_at<? ORDER BY created_at DESC LIMIT 1", (log_ts,)).fetchone()
+            if msg_count >= 3:
+                c.close(); return
+            if last_msg and log_ts - last_msg["created_at"] < 10800:
+                c.close(); return
+            sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
+            if not sess: c.close(); return
+            sid = sess["id"]
+            c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)", (sid, "assistant", content, log_ts, "keepalive", 0))
+            c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
+            c.commit()
+        elif action == "diary" and content:
+            diary_count = c.execute("SELECT COUNT(*) FROM diaries WHERE created_at>=?", (today_start,)).fetchone()[0]
+            last_diary = c.execute("SELECT created_at FROM diaries ORDER BY created_at DESC LIMIT 1").fetchone()
+            if diary_count >= 1:
+                c.close(); return
+            if last_diary and log_ts - last_diary["created_at"] < 28800:
+                c.close(); return
+            c.execute("INSERT INTO diaries(content, created_at) VALUES(?,?)", (content[:200], log_ts))
+            c.commit()
+        elif action == "whisper" and content:
+            w_count = c.execute("SELECT COUNT(*) FROM whispers WHERE initiator='ai' AND created_at>=?", (today_start,)).fetchone()[0]
+            last_w = c.execute("SELECT created_at FROM whispers WHERE initiator='ai' ORDER BY created_at DESC LIMIT 1").fetchone()
+            if w_count >= 3:
+                c.close(); return
+            if last_w and log_ts - last_w["created_at"] < 10800:
+                c.close(); return
+            c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", log_ts))
+            c.commit()
+        c.close()
     except Exception as e:
-        return {"initiated": False, "error": str(e)}
+        print(f"Keepalive error: {e}")
+
+def keepalive_check_sync():
+    import asyncio
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        asyncio.ensure_future(keepalive_check())
+    else:
+        loop.run_until_complete(keepalive_check())
+
+@app.get("/api/keepalive/toggle")
+async def get_keepalive_toggle():
+    c = get_db(); r = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone(); c.close()
+    return {"enabled": r["value"] == "true" if r else True}
+
+@app.post("/api/keepalive/toggle")
+async def set_keepalive_toggle(req: dict):
+    v = "true" if req.get("enabled", True) else "false"
+    c = get_db(); c.execute("INSERT INTO settings(key,value) VALUES('keepalive_enabled',?) ON CONFLICT(key) DO UPDATE SET value=?", (v, v)); c.commit(); c.close()
+    return {"ok": True, "enabled": v == "true"}
 
 # ══ Books ══
 @app.post("/api/books/upload")
