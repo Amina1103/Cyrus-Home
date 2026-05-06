@@ -868,21 +868,31 @@ def _bj_month_range(month_str):
     return start.timestamp(), end.timestamp()
 
 async def keepalive_check():
+    print("Keepalive: 检查中...")
     try:
         now_bj = _beijing_now()
         hour = now_bj.hour
-        if not (hour >= 11 or hour < 3): return
+        if not (hour >= 11 or hour < 3):
+            print(f"Keepalive: 不在活跃时段, 当前北京时间 {hour}:00")
+            return
         now_ts = time.time()
         c = get_db()
         last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
         last_user_ts = last_user_row["created_at"] if last_user_row else None
-        if last_user_ts is not None and now_ts - last_user_ts <= 3300: c.close(); return
+        if last_user_ts is not None and now_ts - last_user_ts <= 3300:
+            print(f"Keepalive: 距上次聊天 {(now_ts - last_user_ts) / 60:.1f} 分钟，不足 55 分钟")
+            c.close(); return
         last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
-        if last_log and now_ts - last_log["created_at"] <= 3300: c.close(); return
+        if last_log and now_ts - last_log["created_at"] <= 3300:
+            print(f"Keepalive: 距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟")
+            c.close(); return
         toggle = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone()
         c.close()
-        if toggle and toggle["value"] == "false": return
+        if toggle and toggle["value"] == "false":
+            print("Keepalive: 开关已关闭")
+            return
         free_mode = random.random() < 0.2
+        print(f"Keepalive: 触发！模式={'free' if free_mode else 'normal'}, 北京时间={now_bj.strftime('%Y-%m-%d %H:%M')}")
         explore_line = "- explore：自由探索互联网，搜你感兴趣的东西" if free_mode else ""
         explore_action = " 或 explore" if free_mode else ""
         sys_blocks = build_system_blocks()
@@ -930,6 +940,7 @@ async def keepalive_check():
         action = action_match.group(1).strip().lower() if action_match else "none"
         content = content_match.group(1).strip() if content_match else ""
         if action not in ("none","message","diary","whisper","explore"): action = "none"
+        print(f"Keepalive: thoughts={thoughts}, action={action}")
         log_ts = time.time()
         c = get_db()
         c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at, input_tokens, output_tokens) VALUES(?,?,?,?,?,?,?)", (thoughts, action, content, 0, log_ts, in_tok, out_tok))
@@ -970,15 +981,30 @@ async def keepalive_check():
             await send_push_notification(title="Cyrus", body="你有一张新纸条", url="/")
         c.close()
     except Exception as e:
-        print(f"Keepalive error: {e}")
+        import traceback
+        print(f"Keepalive error: {e!r}")
+        traceback.print_exc()
 
 def keepalive_check_sync():
-    import asyncio
-    loop = asyncio.get_event_loop()
+    import asyncio, traceback
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
     if loop.is_running():
-        asyncio.ensure_future(keepalive_check())
+        task = asyncio.ensure_future(keepalive_check())
+        def _done(t):
+            try: t.result()
+            except Exception as e:
+                print(f"Keepalive task error: {e!r}")
+                traceback.print_exc()
+        task.add_done_callback(_done)
     else:
-        loop.run_until_complete(keepalive_check())
+        try:
+            loop.run_until_complete(keepalive_check())
+        except Exception as e:
+            print(f"Keepalive sync error: {e!r}")
+            traceback.print_exc()
 
 async def cache_warmup():
     try:
