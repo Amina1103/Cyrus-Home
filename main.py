@@ -620,11 +620,11 @@ def get_pending_keepalive_records():
         lines.append(f"{ts} 你想：「{r['thoughts']}」")
         action = r["action"]; content = r["content"] or ""
         if action == "message":
-            lines.append(f"      → 你给 Amina 发了消息：「{content[:50]}」")
+            lines.append(f"      → 你给 Amina 发了消息：「{content}」")
         elif action == "diary":
-            lines.append(f"      → 你写了日记：「{content[:50]}...」")
+            lines.append(f"      → 你写了日记：「{content}」")
         elif action == "whisper":
-            lines.append("      → 你给 Amina 写了一张悄悄话")
+            lines.append(f"      → 你给 Amina 写了一张悄悄话：「{content}」")
         elif action == "none":
             lines.append("      → 什么都没做")
     return "\n".join(lines), ids
