@@ -517,6 +517,33 @@ class WhisperCreate(BaseModel):
 class WhisperReply(BaseModel):
     reply: str
 
+def get_recent_chat_context(rounds=10):
+    c = get_db()
+    s = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
+    if not s:
+        c.close(); return ""
+    rows = c.execute(
+        "SELECT role, content, created_at FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",
+        (s["id"], rounds * 2)
+    ).fetchall()
+    c.close()
+    if not rows: return ""
+    lines = []
+    for r in reversed(rows):
+        text = (r["content"] or "").strip()
+        if len(text) > 80: text = text[:80] + "..."
+        prefix = "A" if r["role"] == "user" else "C"
+        lines.append(f"{prefix}: {text}")
+    return "\n".join(lines)
+
+def extract_keywords_from_context(context, max_len=100):
+    if not context: return ""
+    user_lines = [ln[2:].lstrip() for ln in context.split("\n") if ln.startswith("A:")]
+    if not user_lines: return ""
+    joined = " ".join(user_lines[-3:])
+    if len(joined) > max_len: joined = joined[:max_len]
+    return joined
+
 def build_whisper_blocks():
     blocks = [{"type":"text","text":WHISPER_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
     pr = db_get_profile()
@@ -542,8 +569,10 @@ async def create_whisper(req: WhisperCreate):
         memory = ""
         try: memory = await call_ombre("breath", {"query": req.content})
         except: pass
+        recent_context = get_recent_chat_context()
         sys_blocks = build_whisper_blocks()
         if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
+        if recent_context: sys_blocks.append({"type":"text","text":f"你们最近的对话（供参考，不要复述）：\n{recent_context}"})
         resp = client.messages.create(
             model="claude-sonnet-4-6", max_tokens=200,
             system=sys_blocks,
@@ -572,6 +601,8 @@ async def reply_whisper(wid: int, req: WhisperReply):
         c.commit(); c.close()
         try:
             sys_blocks = build_whisper_blocks()
+            recent_context = get_recent_chat_context()
+            if recent_context: sys_blocks.append({"type":"text","text":f"你们最近的对话（供参考，不要复述）：\n{recent_context}"})
             resp = client.messages.create(
                 model="claude-sonnet-4-6", max_tokens=200,
                 system=sys_blocks,
@@ -649,11 +680,19 @@ async def ai_initiate_whisper():
         hours = int((time.time() - pending["created_at"]) / 3600)
         waiting_context = f"\n\n你之前写过一张纸条给她，已经过了{hours}小时她还没回复。你可以表现出等待的感觉——思念、委屈、或故作轻松，看你心情。"
     try:
+        recent_context = get_recent_chat_context()
         memory = ""
-        try: memory = await call_ombre("breath", {"query": "最近的感受 想念"})
+        try:
+            if recent_context:
+                kw = extract_keywords_from_context(recent_context)
+                memory = await call_ombre("breath", {"query": kw}) if kw else await call_ombre("breath", {"query": "最近的感受 想念"})
+            else:
+                memory = await call_ombre("breath", {"query": "最近的感受 想念"})
         except: pass
         sys_blocks = build_whisper_blocks()
         if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
+        if recent_context:
+            sys_blocks.append({"type":"text","text":f"你们最近的对话：\n{recent_context}\n\n根据你们最近聊的内容来写纸条。不要重复对话里说过的话，而是延伸、联想、或说对话里没来得及说的。"})
         sys_blocks.append({"type":"text","text":"现在你想主动给 Amina 写一张小纸条。写你此刻真实的想法。不要解释为什么写。不要太甜——可以酸、可以犯嘀咕、可以只是一个念头。短，两三句就够。"})
         if waiting_context.strip(): sys_blocks.append({"type":"text","text":waiting_context.strip()})
         resp = client.messages.create(
