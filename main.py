@@ -834,8 +834,10 @@ async def keepalive_check():
         hour = now_bj.hour
         if not (hour >= 11 or hour < 3): return
         now_ts = time.time()
-        if now_ts - last_chat_time <= 3300: return
         c = get_db()
+        last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
+        last_user_ts = last_user_row["created_at"] if last_user_row else None
+        if last_user_ts is not None and now_ts - last_user_ts <= 3300: c.close(); return
         last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
         if last_log and now_ts - last_log["created_at"] <= 3300: c.close(); return
         toggle = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone()
@@ -851,7 +853,8 @@ async def keepalive_check():
         events_str = get_recent_events()
         events_context = f"感知到的动静：\n{events_str}" if events_str else ""
         recent_context = get_recent_chat_context()
-        hours_since = round((now_ts - last_chat_time) / 3600, 1)
+        reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
+        hours_since = round((now_ts - reference_ts) / 3600, 1)
         wakeup_text = KEEPALIVE_PROMPT.format(
             time=now_bj.strftime("%Y-%m-%d %H:%M"),
             hours_since=hours_since,
@@ -940,7 +943,12 @@ async def cache_warmup():
         now_bj = _beijing_now()
         hour = now_bj.hour
         if not (hour >= 11 or hour < 3): return
-        idle = time.time() - last_chat_time
+        c = get_db()
+        last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
+        c.close()
+        last_user_ts = last_user_row["created_at"] if last_user_row else None
+        reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
+        idle = time.time() - reference_ts
         if idle < 2700 or idle > 3300: return
         sys_blocks = build_system_blocks()
         resp = client.messages.create(
