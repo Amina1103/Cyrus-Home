@@ -443,14 +443,19 @@ async def lifespan(app):
     except Exception as e: print(f"⚠ Pinned 记忆加载失败: {e}")
     try:
         c = get_db()
-        c.execute("DELETE FROM settings WHERE key IN ('vapid_public_key','vapid_private_key')")
-        c.commit()
-        priv_b64, pub_b64u = _generate_vapid_keys()
-        VAPID_PRIVATE_KEY = priv_b64; VAPID_PUBLIC_KEY = pub_b64u
-        c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
-        c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_b64, priv_b64))
-        c.commit(); c.close()
-        print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
+        pub_row = c.execute("SELECT value FROM settings WHERE key='vapid_public_key'").fetchone()
+        priv_row = c.execute("SELECT value FROM settings WHERE key='vapid_private_key'").fetchone()
+        if pub_row and priv_row and pub_row["value"] and priv_row["value"]:
+            VAPID_PUBLIC_KEY = pub_row["value"]; VAPID_PRIVATE_KEY = priv_row["value"]
+            print("✓ VAPID 密钥已加载")
+        else:
+            priv_b64, pub_b64u = _generate_vapid_keys()
+            VAPID_PRIVATE_KEY = priv_b64; VAPID_PUBLIC_KEY = pub_b64u
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (pub_b64u, pub_b64u))
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (priv_b64, priv_b64))
+            c.commit()
+            print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
+        c.close()
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
     scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
     scheduler.add_job(cache_warmup_sync, 'interval', minutes=5, id='cache_warmup', max_instances=1)
