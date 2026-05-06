@@ -281,8 +281,8 @@ def db_create_session():
 def db_delete_session(sid):
     c=get_db(); c.execute("DELETE FROM messages WHERE session_id=?",(sid,)); c.execute("DELETE FROM sessions WHERE id=?",(sid,)); c.commit(); c.close()
 def db_get_messages(sid):
-    c=get_db(); rows=c.execute("SELECT role,content,created_at FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-    return [{"role":r["role"],"content":r["content"],"time":r["created_at"]} for r in rows]
+    c=get_db(); rows=c.execute("SELECT role,content,created_at,source FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
+    return [{"role":r["role"],"content":r["content"],"time":r["created_at"],"source":r["source"]} for r in rows]
 def db_add_message(sid,role,content):
     now=time.time(); c=get_db(); c.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)",(sid,role,content,now))
     c.execute("UPDATE sessions SET last_active=? WHERE id=?",(now,sid)); c.commit(); c.close(); return now
