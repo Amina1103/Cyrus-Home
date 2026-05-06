@@ -248,10 +248,17 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reading_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, page_text TEXT DEFAULT '', comment TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, cfi TEXT NOT NULL, label TEXT DEFAULT '', created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS whispers (id INTEGER PRIMARY KEY AUTOINCREMENT, initiator TEXT NOT NULL DEFAULT 'user', content TEXT NOT NULL, reply1 TEXT DEFAULT '', reply2 TEXT DEFAULT '', status TEXT DEFAULT 'pending', favorited INTEGER DEFAULT 0, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS keepalive_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, thoughts TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'none', content TEXT DEFAULT '', consumed INTEGER DEFAULT 0, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS diaries (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'open', created_at REAL NOT NULL);
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
         except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN source TEXT DEFAULT NULL")
+    except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN keepalive_consumed INTEGER DEFAULT 0")
+    except: pass
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def db_get_profile():
@@ -280,6 +287,30 @@ def db_get_recent_messages(sid,limit=20):
 def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
+
+def get_recent_events(hours=6):
+    cutoff = time.time() - hours * 3600
+    c = get_db()
+    rows = c.execute("SELECT type, value, action, created_at FROM events WHERE created_at >= ? ORDER BY created_at ASC", (cutoff,)).fetchall()
+    c.close()
+    if not rows: return ""
+    evs = [dict(r) for r in rows]
+    lines = []
+    for i, ev in enumerate(evs):
+        ts = time.strftime("%H:%M", time.gmtime(ev["created_at"] + 8*3600))
+        if ev["action"] == "close":
+            duration = None
+            for prev in reversed(evs[:i]):
+                if prev["type"] == ev["type"] and prev["action"] == "open":
+                    duration = int((ev["created_at"] - prev["created_at"]) / 60)
+                    break
+            if duration is not None:
+                lines.append(f"{ts} 关了 {ev['value']}（用了 {duration} 分钟）")
+            else:
+                lines.append(f"{ts} 关了 {ev['value']}")
+        else:
+            lines.append(f"{ts} 打开了 {ev['value']}")
+    return "\n".join(lines)
 
 def build_system_blocks(sid=None):
     bp1_text = BASE_SYSTEM_PROMPT
@@ -420,6 +451,16 @@ async def refresh_cache():
         return {"ok": True, "length": len(pinned_memories)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+@app.get("/api/events")
+async def report_event(type: str, value: str, action: str = "open"):
+    now = time.time()
+    c = get_db()
+    dup = c.execute("SELECT id FROM events WHERE type=? AND action=? AND created_at>=? ORDER BY created_at DESC LIMIT 1", (type, action, now - 300)).fetchone()
+    if dup:
+        c.close(); return {"ok": True, "deduped": True}
+    c.execute("INSERT INTO events(type, value, action, created_at) VALUES(?,?,?,?)", (type, value, action, now))
+    c.commit(); c.close()
+    return {"ok": True}
 @app.get("/api/sessions")
 async def list_sessions(): return {"sessions":db_list_sessions()}
 @app.post("/api/sessions")
