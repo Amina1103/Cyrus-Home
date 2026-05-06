@@ -517,6 +517,9 @@ async def chat_stream(req):
             mem=await call_ombre("breath",{})
             if mem: sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{mem}"})
         except: pass
+    pending_text, pending_ids = get_pending_keepalive_records()
+    if pending_text:
+        sys_blocks.append({"type":"text","text":pending_text})
     kw=dict(model=model,max_tokens=16000 if req.thinking else 1024,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
@@ -551,6 +554,14 @@ async def chat_stream(req):
             recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
             kw["messages"]=recent
         rt=db_add_message(req.session_id,"assistant",accumulated); saved=True
+        try:
+            c2=get_db()
+            if pending_ids:
+                ph=",".join("?"*len(pending_ids))
+                c2.execute(f"UPDATE keepalive_logs SET consumed=1 WHERE id IN ({ph})", pending_ids)
+            c2.execute("UPDATE messages SET keepalive_consumed=1 WHERE session_id=? AND source='keepalive' AND keepalive_consumed=0", (req.session_id,))
+            c2.commit(); c2.close()
+        except: pass
         if tc: yield sse({"type":"tools","calls":tc})
         if tp: yield sse({"type":"thinking","content":"\n\n".join(tp)})
         yield sse({"type":"reply","content":accumulated,"time":rt})
@@ -596,6 +607,27 @@ def extract_keywords_from_context(context, max_len=100):
     joined = " ".join(user_lines[-3:])
     if len(joined) > max_len: joined = joined[:max_len]
     return joined
+
+def get_pending_keepalive_records():
+    c = get_db()
+    rows = c.execute("SELECT id, thoughts, action, content, created_at FROM keepalive_logs WHERE consumed=0 ORDER BY created_at ASC").fetchall()
+    c.close()
+    if not rows: return "", []
+    ids = [r["id"] for r in rows]
+    lines = ["[自由活动记录]"]
+    for r in rows:
+        ts = time.strftime("%H:%M", time.gmtime(r["created_at"] + 8*3600))
+        lines.append(f"{ts} 你想：「{r['thoughts']}」")
+        action = r["action"]; content = r["content"] or ""
+        if action == "message":
+            lines.append(f"      → 你给 Amina 发了消息：「{content[:50]}」")
+        elif action == "diary":
+            lines.append(f"      → 你写了日记：「{content[:50]}...」")
+        elif action == "whisper":
+            lines.append("      → 你给 Amina 写了一张悄悄话")
+        elif action == "none":
+            lines.append("      → 什么都没做")
+    return "\n".join(lines), ids
 
 def build_whisper_blocks():
     blocks = [{"type":"text","text":WHISPER_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
