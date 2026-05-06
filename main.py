@@ -986,25 +986,13 @@ async def keepalive_check():
         traceback.print_exc()
 
 def keepalive_check_sync():
-    import asyncio, traceback
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
-    if loop.is_running():
-        task = asyncio.ensure_future(keepalive_check())
-        def _done(t):
-            try: t.result()
-            except Exception as e:
-                print(f"Keepalive task error: {e!r}")
-                traceback.print_exc()
-        task.add_done_callback(_done)
-    else:
-        try:
-            loop.run_until_complete(keepalive_check())
-        except Exception as e:
-            print(f"Keepalive sync error: {e!r}")
-            traceback.print_exc()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(keepalive_check())
+        loop.close()
+    except Exception as e:
+        print(f"Keepalive sync error: {e}")
 
 async def cache_warmup():
     try:
@@ -1034,12 +1022,13 @@ async def cache_warmup():
         print(f"Cache warmup error: {e}")
 
 def cache_warmup_sync():
-    import asyncio
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        asyncio.ensure_future(cache_warmup())
-    else:
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(cache_warmup())
+        loop.close()
+    except Exception as e:
+        print(f"Cache warmup sync error: {e}")
 
 @app.get("/api/keepalive/toggle")
 async def get_keepalive_toggle():
