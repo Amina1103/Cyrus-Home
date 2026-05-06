@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timezone, timedelta
+from pywebpush import webpush, WebPushException
 
 OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
 DB_PATH = "data/cyrus.db"
@@ -236,6 +237,9 @@ reading_contexts = {}
 reading_conversations = {}
 last_chat_time = time.time()
 scheduler = AsyncIOScheduler()
+VAPID_PUBLIC_KEY = ""
+VAPID_PRIVATE_KEY = ""
+VAPID_SUB = "mailto:olinrosita295@gmail.com"
 
 # ══ DB ══
 def get_db():
@@ -256,6 +260,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS keepalive_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, thoughts TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'none', content TEXT DEFAULT '', consumed INTEGER DEFAULT 0, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS diaries (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'open', created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL UNIQUE, keys_json TEXT NOT NULL, created_at REAL NOT NULL);
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
@@ -416,13 +421,40 @@ async def execute_tool(name,args):
 # ══ App ══
 @asynccontextmanager
 async def lifespan(app):
-    global ombre_tools, pinned_memories; init_db()
+    global ombre_tools, pinned_memories, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY; init_db()
     try: ombre_tools=await fetch_ombre_tools(); print(f"✓ Ombre Brain 已连接，{len(ombre_tools)} 个工具")
     except Exception as e: print(f"⚠ Ombre Brain 连接失败: {e}")
     try:
         pinned_memories=await call_ombre("breath",{"query":"","max_tokens":5000})
         print(f"✓ Pinned 记忆已加载，{len(pinned_memories)} 字符")
     except Exception as e: print(f"⚠ Pinned 记忆加载失败: {e}")
+    try:
+        c = get_db()
+        pub_row = c.execute("SELECT value FROM settings WHERE key='vapid_public_key'").fetchone()
+        priv_row = c.execute("SELECT value FROM settings WHERE key='vapid_private_key'").fetchone()
+        if pub_row and priv_row:
+            VAPID_PUBLIC_KEY = pub_row["value"]; VAPID_PRIVATE_KEY = priv_row["value"]
+            print("✓ VAPID 密钥已加载")
+        else:
+            from py_vapid import Vapid
+            from cryptography.hazmat.primitives import serialization
+            v = Vapid(); v.generate_keys()
+            VAPID_PRIVATE_KEY = v.private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            ).decode()
+            pub_raw = v.public_key.public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint,
+            )
+            VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(pub_raw).rstrip(b"=").decode()
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_public_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (VAPID_PUBLIC_KEY, VAPID_PUBLIC_KEY))
+            c.execute("INSERT INTO settings(key,value) VALUES('vapid_private_key',?) ON CONFLICT(key) DO UPDATE SET value=?", (VAPID_PRIVATE_KEY, VAPID_PRIVATE_KEY))
+            c.commit()
+            print("✓ VAPID 密钥已生成")
+        c.close()
+    except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
     scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
     scheduler.start()
     print("Keepalive scheduler started")
@@ -907,6 +939,69 @@ async def set_keepalive_toggle(req: dict):
     v = "true" if req.get("enabled", True) else "false"
     c = get_db(); c.execute("INSERT INTO settings(key,value) VALUES('keepalive_enabled',?) ON CONFLICT(key) DO UPDATE SET value=?", (v, v)); c.commit(); c.close()
     return {"ok": True, "enabled": v == "true"}
+
+# ══ Web Push ══
+async def send_push_notification(title, body, url="/"):
+    if not VAPID_PRIVATE_KEY:
+        print("⚠ push skipped: no VAPID key"); return
+    c = get_db()
+    last = c.execute("SELECT value FROM settings WHERE key='last_push_time'").fetchone()
+    if last:
+        try:
+            if time.time() - float(last["value"]) < 7200:
+                c.close(); return
+        except: pass
+    subs = c.execute("SELECT id, endpoint, keys_json FROM push_subscriptions").fetchall()
+    c.close()
+    if not subs: return
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    sent = False
+    def _push(sub_info):
+        return webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_SUB})
+    for sub in subs:
+        try: keys = json.loads(sub["keys_json"])
+        except: continue
+        sub_info = {"endpoint": sub["endpoint"], "keys": keys}
+        try:
+            await asyncio.to_thread(_push, sub_info)
+            sent = True
+            print(f"✓ push 发送 {sub['endpoint'][:60]}")
+        except WebPushException as e:
+            sc = getattr(getattr(e, "response", None), "status_code", None)
+            print(f"⚠ push 失败 ({sc}): {e}")
+            if sc in (404, 410):
+                try:
+                    c2 = get_db(); c2.execute("DELETE FROM push_subscriptions WHERE id=?", (sub["id"],)); c2.commit(); c2.close()
+                except: pass
+        except Exception as e:
+            print(f"⚠ push 错误: {e}")
+    if sent:
+        try:
+            now_s = str(time.time())
+            c2 = get_db(); c2.execute("INSERT INTO settings(key,value) VALUES('last_push_time',?) ON CONFLICT(key) DO UPDATE SET value=?", (now_s, now_s)); c2.commit(); c2.close()
+        except: pass
+
+@app.get("/api/push/vapid-key")
+async def push_vapid_key():
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(req: dict):
+    endpoint = req.get("endpoint", "")
+    keys = req.get("keys", {})
+    if not endpoint: return {"ok": False, "error": "no endpoint"}
+    keys_json = json.dumps(keys)
+    c = get_db()
+    c.execute("INSERT INTO push_subscriptions(endpoint, keys_json, created_at) VALUES(?,?,?) ON CONFLICT(endpoint) DO UPDATE SET keys_json=excluded.keys_json", (endpoint, keys_json, time.time()))
+    c.commit(); c.close()
+    return {"ok": True}
+
+@app.delete("/api/push/subscribe")
+async def push_unsubscribe(req: dict):
+    endpoint = req.get("endpoint", "")
+    if not endpoint: return {"ok": False, "error": "no endpoint"}
+    c = get_db(); c.execute("DELETE FROM push_subscriptions WHERE endpoint=?", (endpoint,)); c.commit(); c.close()
+    return {"ok": True}
 
 @app.get("/api/keepalive/logs")
 async def keepalive_logs_for_day(date: str = None):

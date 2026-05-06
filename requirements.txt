@@ -7,3 +7,5 @@ duckduckgo-search
 beautifulsoup4
 python-multipart
 apscheduler
+pywebpush
+cryptography
