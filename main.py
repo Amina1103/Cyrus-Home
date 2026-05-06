@@ -270,6 +270,10 @@ def init_db():
     except: pass
     try: conn.execute("ALTER TABLE messages ADD COLUMN keepalive_consumed INTEGER DEFAULT 0")
     except: pass
+    try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN input_tokens INTEGER DEFAULT 0")
+    except: pass
+    try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN output_tokens INTEGER DEFAULT 0")
+    except: pass
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def db_get_profile():
@@ -916,6 +920,9 @@ async def keepalive_check():
         for block in resp.content:
             if getattr(block, "type", None) == "text":
                 text += block.text
+        usage = getattr(resp, "usage", None)
+        in_tok = int(getattr(usage, "input_tokens", 0) or 0) if usage else 0
+        out_tok = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
         thoughts_match = re.search(r'THOUGHTS:\s*(.+?)(?:\n|$)', text)
         action_match = re.search(r'ACTION:\s*(\w+)', text)
         content_match = re.search(r'CONTENT:\s*([\s\S]*)', text)
@@ -925,7 +932,7 @@ async def keepalive_check():
         if action not in ("none","message","diary","whisper","explore"): action = "none"
         log_ts = time.time()
         c = get_db()
-        c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at) VALUES(?,?,?,?,?)", (thoughts, action, content, 0, log_ts))
+        c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at, input_tokens, output_tokens) VALUES(?,?,?,?,?,?,?)", (thoughts, action, content, 0, log_ts, in_tok, out_tok))
         c.commit()
         today_start = _beijing_today_start_ts()
         if action == "message" and content:
@@ -1096,7 +1103,7 @@ async def keepalive_logs_for_day(date: str = None):
     if not date: date = _beijing_now().strftime("%Y-%m-%d")
     start, end = _bj_day_range(date)
     c = get_db()
-    rows = c.execute("SELECT id, thoughts, action, content, created_at FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
+    rows = c.execute("SELECT id, thoughts, action, content, created_at, input_tokens, output_tokens FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
     c.close()
     logs = [{
         "id": r["id"],
@@ -1104,6 +1111,8 @@ async def keepalive_logs_for_day(date: str = None):
         "action": r["action"],
         "content": r["content"] or "",
         "time": time.strftime("%H:%M", time.gmtime(r["created_at"] + 8*3600)),
+        "input_tokens": int(r["input_tokens"] or 0),
+        "output_tokens": int(r["output_tokens"] or 0),
     } for r in rows]
     return {"date": date, "logs": logs}
 
@@ -1132,9 +1141,10 @@ async def keepalive_calendar(month: str):
     start, end = _bj_month_range(month)
     bj = timezone(timedelta(hours=8))
     c = get_db()
-    rows = c.execute("SELECT action, created_at FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
+    rows = c.execute("SELECT action, created_at, input_tokens, output_tokens FROM keepalive_logs WHERE created_at>=? AND created_at<? ORDER BY created_at ASC", (start, end)).fetchall()
     c.close()
     days = {}
+    total_in = 0; total_out = 0
     for r in rows:
         d = datetime.fromtimestamp(r["created_at"], tz=bj).strftime("%Y-%m-%d")
         if d not in days:
@@ -1144,7 +1154,9 @@ async def keepalive_calendar(month: str):
         if a == "diary": days[d]["has_diary"] = True
         elif a == "message": days[d]["has_message"] = True
         elif a == "whisper": days[d]["has_whisper"] = True
-    return {"days": days}
+        total_in += int(r["input_tokens"] or 0)
+        total_out += int(r["output_tokens"] or 0)
+    return {"days": days, "totals": {"input_tokens": total_in, "output_tokens": total_out}}
 
 # ══ Books ══
 @app.post("/api/books/upload")
