@@ -899,6 +899,7 @@ async def keepalive_check():
             c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)", (sid, "assistant", content, log_ts, "keepalive", 0))
             c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
             c.commit()
+            await send_push_notification(title="Cyrus", body=content[:100], url="/")
         elif action == "diary" and content:
             diary_count = c.execute("SELECT COUNT(*) FROM diaries WHERE created_at>=?", (today_start,)).fetchone()[0]
             last_diary = c.execute("SELECT created_at FROM diaries ORDER BY created_at DESC LIMIT 1").fetchone()
@@ -917,6 +918,7 @@ async def keepalive_check():
                 c.close(); return
             c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", log_ts))
             c.commit()
+            await send_push_notification(title="Cyrus", body="你有一张新纸条", url="/")
         c.close()
     except Exception as e:
         print(f"Keepalive error: {e}")
