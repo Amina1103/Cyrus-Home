@@ -1230,3 +1230,15 @@ async def root(): return FileResponse("frontend/index.html")
 
 @app.get("/sw.js")
 async def service_worker(): return FileResponse("frontend/sw.js", media_type="application/javascript")
+
+@app.get("/manifest.json")
+async def manifest(): return FileResponse("frontend/manifest.json", media_type="application/manifest+json")
+
+@app.get("/logo.svg")
+async def logo(): return FileResponse("frontend/logo.svg", media_type="image/svg+xml")
+
+@app.get("/icon-192.png")
+async def icon_192(): return FileResponse("frontend/icon-192.png", media_type="image/png")
+
+@app.get("/icon-512.png")
+async def icon_512(): return FileResponse("frontend/icon-512.png", media_type="image/png")
