@@ -895,6 +895,14 @@ async def chat_stream(req):
     all_tools=LOCAL_TOOLS+ombre_tools; allowed={"claude-sonnet-4-6","claude-opus-4-6"}
     model=req.model if req.model in allowed else "claude-sonnet-4-6"
     sys_blocks=build_system_blocks(req.session_id)
+    # 持久化本次配置，供 cache_warmup 使用同样的桶预热
+    try:
+        cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id})
+        _c = get_db()
+        _c.execute("INSERT INTO settings(key,value) VALUES('last_chat_config',?) ON CONFLICT(key) DO UPDATE SET value=?", (cfg_str, cfg_str))
+        _c.commit(); _c.close()
+    except Exception as e:
+        print(f"⚠ 保存 last_chat_config 失败: {e}")
     if len(recent)<=2:
         yield sse({"type":"status","text":"正在回忆..."})
         try:
@@ -1325,23 +1333,46 @@ async def cache_warmup():
         if not (hour >= 11 or hour < 3): return
         c = get_db()
         last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
+        cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
         c.close()
         last_user_ts = last_user_row["created_at"] if last_user_row else None
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         idle = time.time() - reference_ts
         if idle < 2700 or idle > 3300: return
-        sys_blocks = build_system_blocks()
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1,
+        if not cfg_row or not cfg_row["value"]:
+            print("Cache warmup: no last_chat_config yet, skip")
+            return
+        try:
+            cfg = json.loads(cfg_row["value"])
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"⚠ 解析 last_chat_config 失败: {e}")
+            return
+        sid = cfg.get("session_id")
+        model = cfg.get("model", "claude-sonnet-4-6")
+        thinking_on = bool(cfg.get("thinking", False))
+        if not sid:
+            print("Cache warmup: no session_id in config, skip")
+            return
+        sys_blocks = build_system_blocks(sid)
+        all_tools = LOCAL_TOOLS + ombre_tools
+        kw = dict(
+            model=model,
             system=sys_blocks,
-            messages=[{"role":"user","content":"ping"}],
+            messages=[{"role": "user", "content": "ping"}],
         )
+        if all_tools:
+            kw["tools"] = all_tools
+        if thinking_on:
+            kw["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+            kw["max_tokens"] = 1025
+        else:
+            kw["max_tokens"] = 1
+        resp = client.messages.create(**kw)
         u = resp.usage
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
-        status = "hit" if cr > 0 else "miss"
-        print(f"Cache warmup: {status} (read={cr}, creation={cc}, input={u.input_tokens}, output={u.output_tokens})")
+        status = "HIT" if cr > 0 else "MISS"
+        print(f"Cache warmup [{status}] model={model} thinking={thinking_on} sid={sid} read={cr} creation={cc} input={u.input_tokens} output={u.output_tokens}")
     except Exception as e:
         print(f"Cache warmup error: {e}")
 
