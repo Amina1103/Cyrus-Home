@@ -387,6 +387,16 @@ def db_add_message(sid,role,content,images=None):
 def db_get_recent_messages(sid,limit=50):
     c=get_db(); rows=c.execute("SELECT role,content FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",(sid,limit)).fetchall(); c.close()
     return [{"role":r["role"],"content":r["content"]} for r in reversed(rows)]
+def db_get_messages_since_summary(sid, max_messages=200):
+    c = get_db()
+    s = c.execute("SELECT summary_until FROM sessions WHERE id=?", (sid,)).fetchone()
+    until = (s["summary_until"] if s and s["summary_until"] else 0)
+    rows = c.execute(
+        "SELECT role, content FROM messages WHERE session_id=? AND id > ? ORDER BY created_at ASC LIMIT ?",
+        (sid, until, max_messages)
+    ).fetchall()
+    c.close()
+    return [{"role": r["role"], "content": r["content"]} for r in rows]
 def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
@@ -456,8 +466,8 @@ async def maybe_generate_summary(sid):
         c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
         if not s: c.close(); return
         su=s["summary_until"] or 0; msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-        if len(msgs)<=25: return
-        ts=[m for m in msgs[:-40] if m["id"]>su]
+        if len(msgs)<=40: return
+        ts=[m for m in msgs[:-60] if m["id"]>su]
         if len(ts)<5: return
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
         old=s["summary"] or ""; p="""请用2000-3000字记录以下对话。不是概括"发生了什么"，而是保留对话本身。要求：
@@ -572,6 +582,23 @@ async def lifespan(app):
 
 app = FastAPI(lifespan=lifespan)
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+def add_message_cache_breakpoint(messages):
+    if len(messages) < 2:
+        return messages
+    target_idx = len(messages) - 2
+    msg = messages[target_idx]
+    content = msg.get("content")
+    if isinstance(content, str):
+        messages[target_idx] = {
+            "role": msg["role"],
+            "content": [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}],
+        }
+    elif isinstance(content, list) and content:
+        new_content = [dict(b) for b in content]
+        new_content[-1]["cache_control"] = {"type": "ephemeral"}
+        messages[target_idx] = {"role": msg["role"], "content": new_content}
+    return messages
 
 def serialize_blocks(blocks):
     r=[]
@@ -703,7 +730,7 @@ async def chat_stream(req):
     ut=db_add_message(req.session_id,"user",req.message or "[图片]", image_paths or None)
     yield sse({"type":"user_time","time":ut})
     yield sse({"type":"status","text":"正在思考..."})
-    recent=db_get_recent_messages(req.session_id,50)
+    recent=db_get_messages_since_summary(req.session_id, max_messages=200)
     if req.images:
         parts=[{"type":"image","source":{"type":"base64","media_type":i.get("media_type","image/jpeg"),"data":i["data"]}} for i in req.images]
         parts.append({"type":"text","text":req.message or "看看这张图"}); recent[-1]={"role":"user","content":parts}
@@ -725,6 +752,7 @@ async def chat_stream(req):
     ti,to=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
     try:
         while True:
+            kw["messages"] = add_message_cache_breakpoint(list(recent))
             with client.messages.stream(**kw) as stream:
                 for event in stream:
                     et=getattr(event,"type",None)
