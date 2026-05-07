@@ -590,7 +590,9 @@ def _generate_vapid_keys():
 
 @asynccontextmanager
 async def lifespan(app):
-    global ombre_tools, pinned_memories, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY; init_db()
+    global ombre_tools, pinned_memories, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, SESSION_SECRET; init_db()
+    SESSION_SECRET = get_or_create_session_secret()
+    print("✓ Session secret loaded")
     try: ombre_tools=await fetch_ombre_tools(); print(f"✓ Ombre Brain 已连接，{len(ombre_tools)} 个工具")
     except Exception as e: print(f"⚠ Ombre Brain 连接失败: {e}")
     try:
@@ -624,36 +626,86 @@ async def lifespan(app):
 app = FastAPI(lifespan=lifespan)
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-PUBLIC_PATHS = {"/manifest.json", "/sw.js", "/logo.svg", "/icon-192.png", "/icon-512.png"}
+import hmac, hashlib
+
+SESSION_SECRET = ""
+
+def get_or_create_session_secret():
+    c = get_db()
+    r = c.execute("SELECT value FROM settings WHERE key='session_secret'").fetchone()
+    if r and r["value"]:
+        c.close()
+        return r["value"]
+    new_secret = secrets.token_hex(32)
+    c.execute(
+        "INSERT INTO settings(key,value) VALUES('session_secret',?) ON CONFLICT(key) DO UPDATE SET value=?",
+        (new_secret, new_secret),
+    )
+    c.commit(); c.close()
+    return new_secret
+
+def make_session_token():
+    payload = f"{int(time.time())}"
+    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+def verify_session_token(token):
+    if not token: return False
+    try:
+        payload, sig = token.rsplit(".", 1)
+        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected): return False
+        ts = int(payload)
+        if time.time() - ts > 30 * 86400: return False
+        return True
+    except Exception:
+        return False
+
+PUBLIC_PATHS = {"/login", "/api/login", "/manifest.json", "/sw.js", "/logo.svg", "/icon-192.png", "/icon-512.png"}
 
 @app.middleware("http")
-async def basic_auth_middleware(request: Request, call_next):
+async def auth_middleware(request: Request, call_next):
     if request.url.path in PUBLIC_PATHS:
         return await call_next(request)
     if not APP_PASSWORD:
         return await call_next(request)
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Basic "):
-        return Response(
-            content="Authentication required",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="Cyrus Home"'},
-        )
-    try:
-        encoded = auth.split(" ", 1)[1]
-        decoded = base64.b64decode(encoded).decode("utf-8")
-        username, password = decoded.split(":", 1)
-    except Exception:
-        return Response(content="Invalid auth", status_code=401)
-    user_ok = secrets.compare_digest(username, APP_USERNAME)
-    pass_ok = secrets.compare_digest(password, APP_PASSWORD)
+    if verify_session_token(request.cookies.get("session")):
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return Response(status_code=302, headers={"Location": "/login"})
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/login")
+async def api_login(req: LoginRequest):
+    user_ok = secrets.compare_digest(req.username, APP_USERNAME)
+    pass_ok = secrets.compare_digest(req.password, APP_PASSWORD)
     if not (user_ok and pass_ok):
-        return Response(
-            content="Invalid credentials",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="Cyrus Home"'},
-        )
-    return await call_next(request)
+        return JSONResponse({"error": "invalid credentials"}, status_code=401)
+    token = make_session_token()
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        key="session",
+        value=token,
+        max_age=30 * 86400,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+    return response
+
+@app.post("/api/logout")
+async def api_logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie("session")
+    return response
+
+@app.get("/login")
+async def login_page():
+    return FileResponse("frontend/login.html")
 
 def add_message_cache_breakpoint(messages):
     if len(messages) < 2:
