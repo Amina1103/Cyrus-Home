@@ -649,11 +649,9 @@ async def lifespan(app):
             print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
         c.close()
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
-    scheduler.add_job(keepalive_check_sync, 'interval', minutes=5, id='keepalive', max_instances=1)
-    scheduler.add_job(cache_warmup_sync, 'interval', minutes=5, id='cache_warmup', max_instances=1)
+    scheduler.add_job(heartbeat_sync, 'interval', minutes=5, id='heartbeat', max_instances=1)
     scheduler.start()
-    print("Keepalive scheduler started")
-    print("Cache warmup scheduler started")
+    print("Heartbeat scheduler started")
     yield
     scheduler.shutdown()
 
@@ -1209,32 +1207,62 @@ def _bj_month_range(month_str):
     end = datetime(y+1, 1, 1, 0, 0, 0, tzinfo=bj) if m == 12 else datetime(y, m+1, 1, 0, 0, 0, tzinfo=bj)
     return start.timestamp(), end.timestamp()
 
-async def keepalive_check():
-    print("Keepalive: 检查中...")
+async def unified_heartbeat():
+    print("Heartbeat: 检查中...")
     try:
         now_bj = _beijing_now()
         hour = now_bj.hour
         if not (hour >= 11 or hour < 3):
-            print(f"Keepalive: 不在活跃时段, 当前北京时间 {hour}:00")
+            print(f"Heartbeat: 不在活跃时段, 当前北京时间 {hour}:00")
             return
         now_ts = time.time()
         c = get_db()
         last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
         last_user_ts = last_user_row["created_at"] if last_user_row else None
-        if last_user_ts is not None and now_ts - last_user_ts <= 3300:
-            print(f"Keepalive: 距上次聊天 {(now_ts - last_user_ts) / 60:.1f} 分钟，不足 55 分钟")
+        reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
+        idle = now_ts - reference_ts
+        if idle < 2700:
+            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，不足 45 分钟")
             c.close(); return
-        last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
-        if last_log and now_ts - last_log["created_at"] <= 3300:
-            print(f"Keepalive: 距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟")
+        if idle > 10800:
+            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 3 小时，停止")
             c.close(); return
-        toggle = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone()
+        # ── Phase 1: Keepalive（idle >= 55 分钟才触发）──
+        if idle >= 3300:
+            last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
+            keepalive_cooldown_ok = (not last_log) or (now_ts - last_log["created_at"] > 3300)
+            toggle = c.execute("SELECT value FROM settings WHERE key='keepalive_enabled'").fetchone()
+            toggle_on = not (toggle and toggle["value"] == "false")
+            if toggle_on and keepalive_cooldown_ok:
+                c.close()
+                await _do_keepalive(now_bj, now_ts, last_user_ts)
+                c = get_db()  # 重新获取连接，因为 _do_keepalive 内部会操作数据库
+            else:
+                reason = "开关已关闭" if not toggle_on else f"距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟"
+                print(f"Heartbeat: 跳过 keepalive（{reason}）")
+        # ── Phase 2: Cache warmup（始终执行）──
+        cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
         c.close()
-        if toggle and toggle["value"] == "false":
-            print("Keepalive: 开关已关闭")
-            return
+        await _do_warmup(cfg_row)
+    except Exception as e:
+        import traceback
+        print(f"Heartbeat error: {e}")
+        traceback.print_exc()
+
+def heartbeat_sync():
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(unified_heartbeat())
+        loop.close()
+    except Exception as e:
+        print(f"Heartbeat sync error: {e}")
+
+async def _do_keepalive(now_bj, now_ts, last_user_ts):
+    """原 keepalive_check 的核心逻辑，从 Phase 1 调用"""
+    try:
         free_mode = random.random() < 0.2
-        print(f"Keepalive: 触发！模式={'free' if free_mode else 'normal'}, 北京时间={now_bj.strftime('%Y-%m-%d %H:%M')}")
+        print(f"Heartbeat → Keepalive 触发！模式={'free' if free_mode else 'normal'}, 北京时间={now_bj.strftime('%Y-%m-%d %H:%M')}")
         explore_line = "- explore：自由探索互联网，搜你感兴趣的东西" if free_mode else ""
         explore_action = " 或 explore" if free_mode else ""
         sys_blocks = build_system_blocks()
@@ -1282,7 +1310,7 @@ async def keepalive_check():
         action = action_match.group(1).strip().lower() if action_match else "none"
         content = content_match.group(1).strip() if content_match else ""
         if action not in ("none","message","diary","whisper","explore"): action = "none"
-        print(f"Keepalive: thoughts={thoughts}, action={action}")
+        print(f"Heartbeat → Keepalive: thoughts={thoughts}, action={action}")
         log_ts = time.time()
         c = get_db()
         c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at, input_tokens, output_tokens) VALUES(?,?,?,?,?,?,?)", (thoughts, action, content, 0, log_ts, in_tok, out_tok))
@@ -1324,34 +1352,14 @@ async def keepalive_check():
         c.close()
     except Exception as e:
         import traceback
-        print(f"Keepalive error: {e!r}")
+        print(f"Heartbeat → Keepalive error: {e!r}")
         traceback.print_exc()
 
-def keepalive_check_sync():
+async def _do_warmup(cfg_row):
+    """原 cache_warmup 的核心逻辑（Snapshot 对齐版），从 Phase 2 调用"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(keepalive_check())
-        loop.close()
-    except Exception as e:
-        print(f"Keepalive sync error: {e}")
-
-async def cache_warmup():
-    try:
-        now_bj = _beijing_now()
-        hour = now_bj.hour
-        if not (hour >= 11 or hour < 3): return
-        c = get_db()
-        last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
-        cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
-        c.close()
-        last_user_ts = last_user_row["created_at"] if last_user_row else None
-        reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
-        idle = time.time() - reference_ts
-        if idle < 2700 or idle > 10800:
-            return
         if not cfg_row or not cfg_row["value"]:
-            print("Cache warmup: no last_chat_config, skip")
+            print("Heartbeat → Warmup: no last_chat_config, skip")
             return
         try:
             cfg = json.loads(cfg_row["value"])
@@ -1363,18 +1371,16 @@ async def cache_warmup():
         thinking_on = bool(cfg.get("thinking", False))
         budget = int(cfg.get("budget_tokens", 10000)) if thinking_on else 0
         if not sid:
-            print("Cache warmup: no session_id, skip")
+            print("Heartbeat → Warmup: no session_id, skip")
             return
-        # 完整复制 chat_stream 的前缀
         sys_blocks = build_system_blocks(sid)
         pending_text, _ = get_pending_keepalive_records()
         if pending_text:
             sys_blocks.append({"type": "text", "text": pending_text})
         recent = db_get_messages_since_summary(sid, max_messages=200)
         if not recent:
-            print("Cache warmup: no messages, skip")
+            print("Heartbeat → Warmup: no messages, skip")
             return
-        # 追加一条 user 消息（API 要求末尾是 user），BP3 断点会打在倒数第二条（= 真实的最后一条 assistant 消息）
         recent.append({"role": "user", "content": "ping"})
         msgs = add_message_cache_breakpoint(list(recent))
         all_tools = LOCAL_TOOLS + ombre_tools
@@ -1395,20 +1401,11 @@ async def cache_warmup():
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
         status = "HIT" if cr > 0 else "MISS"
-        print(f"Cache warmup [{status}] model={model} thinking={thinking_on} budget={budget} sid={sid} msgs={len(msgs)} read={cr} creation={cc} input={u.input_tokens} output={u.output_tokens}")
+        print(f"Heartbeat → Warmup [{status}] model={model} thinking={thinking_on} budget={budget} sid={sid} msgs={len(msgs)} read={cr} creation={cc} input={u.input_tokens} output={u.output_tokens}")
     except Exception as e:
         import traceback
-        print(f"Cache warmup error: {e}")
+        print(f"Heartbeat → Warmup error: {e}")
         traceback.print_exc()
-
-def cache_warmup_sync():
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(cache_warmup())
-        loop.close()
-    except Exception as e:
-        print(f"Cache warmup sync error: {e}")
 
 @app.get("/api/keepalive/toggle")
 async def get_keepalive_toggle():
