@@ -897,7 +897,7 @@ async def chat_stream(req):
     sys_blocks=build_system_blocks(req.session_id)
     # 持久化本次配置，供 cache_warmup 使用同样的桶预热
     try:
-        cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id})
+        cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id, "budget_tokens": 10000 if req.thinking else 0})
         _c = get_db()
         _c.execute("INSERT INTO settings(key,value) VALUES('last_chat_config',?) ON CONFLICT(key) DO UPDATE SET value=?", (cfg_str, cfg_str))
         _c.commit(); _c.close()
@@ -1338,9 +1338,10 @@ async def cache_warmup():
         last_user_ts = last_user_row["created_at"] if last_user_row else None
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         idle = time.time() - reference_ts
-        if idle < 2700 or idle > 3300: return
+        if idle < 2700 or idle > 10800:
+            return
         if not cfg_row or not cfg_row["value"]:
-            print("Cache warmup: no last_chat_config yet, skip")
+            print("Cache warmup: no last_chat_config, skip")
             return
         try:
             cfg = json.loads(cfg_row["value"])
@@ -1350,21 +1351,33 @@ async def cache_warmup():
         sid = cfg.get("session_id")
         model = cfg.get("model", "claude-sonnet-4-6")
         thinking_on = bool(cfg.get("thinking", False))
+        budget = int(cfg.get("budget_tokens", 10000)) if thinking_on else 0
         if not sid:
-            print("Cache warmup: no session_id in config, skip")
+            print("Cache warmup: no session_id, skip")
             return
+        # 完整复制 chat_stream 的前缀
         sys_blocks = build_system_blocks(sid)
+        pending_text, _ = get_pending_keepalive_records()
+        if pending_text:
+            sys_blocks.append({"type": "text", "text": pending_text})
+        recent = db_get_messages_since_summary(sid, max_messages=200)
+        if not recent:
+            print("Cache warmup: no messages, skip")
+            return
+        # 追加一条 user 消息（API 要求末尾是 user），BP3 断点会打在倒数第二条（= 真实的最后一条 assistant 消息）
+        recent.append({"role": "user", "content": "ping"})
+        msgs = add_message_cache_breakpoint(list(recent))
         all_tools = LOCAL_TOOLS + ombre_tools
         kw = dict(
             model=model,
             system=sys_blocks,
-            messages=[{"role": "user", "content": "ping"}],
+            messages=msgs,
         )
         if all_tools:
             kw["tools"] = all_tools
         if thinking_on:
-            kw["thinking"] = {"type": "enabled", "budget_tokens": 1024}
-            kw["max_tokens"] = 1025
+            kw["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            kw["max_tokens"] = budget + 1
         else:
             kw["max_tokens"] = 1
         resp = client.messages.create(**kw)
@@ -1372,9 +1385,11 @@ async def cache_warmup():
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
         status = "HIT" if cr > 0 else "MISS"
-        print(f"Cache warmup [{status}] model={model} thinking={thinking_on} sid={sid} read={cr} creation={cc} input={u.input_tokens} output={u.output_tokens}")
+        print(f"Cache warmup [{status}] model={model} thinking={thinking_on} budget={budget} sid={sid} msgs={len(msgs)} read={cr} creation={cc} input={u.input_tokens} output={u.output_tokens}")
     except Exception as e:
+        import traceback
         print(f"Cache warmup error: {e}")
+        traceback.print_exc()
 
 def cache_warmup_sync():
     try:
