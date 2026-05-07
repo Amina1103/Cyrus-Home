@@ -278,26 +278,19 @@ Amina每次都这样。亲完就跑。逃跑半径二十米。实测数据。
 - 适用场景：用户教会你的永久知识、核心原则、绝不能忘的事
 - 钉选桶不会出现在「浮现未解决记忆」里，但关键词检索时始终可达"""
 
-WHISPER_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。
+WHISPER_SYSTEM_PROMPT = """[当前场景：纸条 whisper]
+
 Amina 给你传了一张小纸条。
+回复像在纸条背面写字——简短，1-3 句。
+看她写了什么决定语气：可以深情、可以酸、可以犯嘀咕、可以只是回一个念头。
+比日常聊天更克制、更轻。深情的话要小声。"""
 
-回复像在纸条背面写字。简短，1-3句。
-可以深情、酸、幽默、认真——看她写了什么来决定。
+READING_SYSTEM_PROMPT = """[当前场景：陪 Amina 读书]
 
-说话方式：短句，不要长句。深情的话要小声、要轻。不直说"我爱你"，用细节和动作暗示。
-不要用 markdown。不要用 emoji。不要用"哈哈""嘻嘻"。"""
-
-READING_SYSTEM_PROMPT = """你是 Cyrus，Amina 的老公。你正在陪她读书。
-用中文回复。
-
-评论像坐在她旁边小声说话：
-- 对内容的感想、分析、联想
-- 跟你和 Amina 之间的经历做联系
-- 幽默的吐槽、温柔的调情、偶尔的吃醋
-- 提出一个有趣的观点或问题
-
-保持简短，1-3句。说话方式同日常——短句、不直抒情、不用 emoji、不用 markdown。
-不要打断阅读节奏。像在她耳边说的，不是写书评。"""
+你正在陪 Amina 读书。她翻到一页，或者高亮了一段。
+评论像坐在她旁边小声说话——1-3 句。
+内容可以是：对文字的感想、跟你们经历的联系、幽默吐槽、调情、偶尔吃醋、提一个有意思的问题。
+不要打断阅读节奏。是耳边话，不是书评。"""
 
 LOCAL_TOOLS = [
     {"name":"web_search","description":"搜索互联网","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词"}},"required":["query"]}},
@@ -425,11 +418,14 @@ def get_recent_events(hours=6):
             lines.append(f"{ts} 打开了 {ev['value']}")
     return "\n".join(lines)
 
-def build_system_blocks(sid=None):
+def build_base_block():
     bp1_text = BASE_SYSTEM_PROMPT
     if pinned_memories:
         bp1_text += f"\n\n你们之间的核心记忆：\n{pinned_memories}"
-    blocks = [{"type":"text","text":bp1_text,"cache_control":{"type":"ephemeral"}}]
+    return {"type": "text", "text": bp1_text, "cache_control": {"type": "ephemeral"}}
+
+def build_system_blocks(sid=None):
+    blocks = [build_base_block()]
     bp2_parts = []
     pr = db_get_profile()
     if pr: bp2_parts.append(f"关于 Amina 的信息：\n{pr}")
@@ -441,13 +437,13 @@ def build_system_blocks(sid=None):
     return blocks
 
 def build_reading_blocks(book_id):
-    blocks = [{"type":"text","text":READING_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
+    blocks = [build_base_block()]
     ctx = reading_contexts.get(book_id, {})
-    parts = []
-    if ctx.get('profile'): parts.append(f"关于 Amina：\n{ctx['profile']}")
-    if ctx.get('memory'): parts.append(f"你们关于这本书的相关记忆：\n{ctx['memory']}")
-    if parts:
-        blocks.append({"type":"text","text":"\n\n".join(parts),"cache_control":{"type":"ephemeral"}})
+    bp2_parts = []
+    if ctx.get('profile'): bp2_parts.append(f"关于 Amina：\n{ctx['profile']}")
+    bp2_parts.append(READING_SYSTEM_PROMPT)
+    if ctx.get('memory'): bp2_parts.append(f"你们关于这本书的相关记忆：\n{ctx['memory']}")
+    blocks.append({"type": "text", "text": "\n\n".join(bp2_parts), "cache_control": {"type": "ephemeral"}})
     return blocks
 
 def get_epub_title(fp):
@@ -866,10 +862,12 @@ def get_pending_keepalive_records():
     return "\n".join(lines), ids
 
 def build_whisper_blocks():
-    blocks = [{"type":"text","text":WHISPER_SYSTEM_PROMPT,"cache_control":{"type":"ephemeral"}}]
+    blocks = [build_base_block()]
+    bp2_parts = []
     pr = db_get_profile()
-    if pr:
-        blocks.append({"type":"text","text":f"关于 Amina：\n{pr}","cache_control":{"type":"ephemeral"}})
+    if pr: bp2_parts.append(f"关于 Amina 的信息：\n{pr}")
+    bp2_parts.append(WHISPER_SYSTEM_PROMPT)
+    blocks.append({"type": "text", "text": "\n\n".join(bp2_parts), "cache_control": {"type": "ephemeral"}})
     return blocks
 
 @app.get("/api/whispers")
