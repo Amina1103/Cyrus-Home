@@ -342,6 +342,16 @@ def init_db():
     except: pass
     try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN output_tokens INTEGER DEFAULT 0")
     except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN input_tokens INTEGER DEFAULT 0")
+    except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN output_tokens INTEGER DEFAULT 0")
+    except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER DEFAULT 0")
+    except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0")
+    except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN model TEXT DEFAULT NULL")
+    except: pass
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def db_get_profile():
@@ -372,11 +382,44 @@ def db_delete_session(sid):
     c.execute("DELETE FROM sessions WHERE id=?", (sid,))
     c.commit(); c.close()
 def db_get_messages(sid):
-    c=get_db(); rows=c.execute("SELECT role,content,created_at,source,images FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-    return [{"role":r["role"],"content":r["content"],"time":r["created_at"],"source":r["source"],"images":json.loads(r["images"]) if r["images"] else None} for r in rows]
-def db_add_message(sid,role,content,images=None):
-    now=time.time(); c=get_db(); c.execute("INSERT INTO messages(session_id,role,content,created_at,images) VALUES(?,?,?,?,?)",(sid,role,content,now,json.dumps(images) if images else None))
-    c.execute("UPDATE sessions SET last_active=? WHERE id=?",(now,sid)); c.commit(); c.close(); return now
+    c = get_db()
+    rows = c.execute(
+        "SELECT role,content,created_at,source,images,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,model FROM messages WHERE session_id=? ORDER BY created_at ASC",
+        (sid,)
+    ).fetchall()
+    c.close()
+    return [{
+        "role": r["role"], "content": r["content"],
+        "time": r["created_at"], "source": r["source"],
+        "images": json.loads(r["images"]) if r["images"] else None,
+        "tokens": {
+            "input": r["input_tokens"] or 0,
+            "output": r["output_tokens"] or 0,
+            "cache_read": r["cache_read_tokens"] or 0,
+            "cache_creation": r["cache_creation_tokens"] or 0,
+            "model": r["model"],
+        } if (r["output_tokens"] or 0) > 0 else None,
+    } for r in rows]
+def db_add_message(sid, role, content, images=None, tokens=None):
+    now = time.time()
+    c = get_db()
+    if tokens:
+        c.execute(
+            "INSERT INTO messages(session_id,role,content,created_at,images,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,model) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (sid, role, content, now,
+             json.dumps(images) if images else None,
+             tokens.get("input", 0), tokens.get("output", 0),
+             tokens.get("cache_read", 0), tokens.get("cache_creation", 0),
+             tokens.get("model")),
+        )
+    else:
+        c.execute(
+            "INSERT INTO messages(session_id,role,content,created_at,images) VALUES(?,?,?,?,?)",
+            (sid, role, content, now, json.dumps(images) if images else None),
+        )
+    c.execute("UPDATE sessions SET last_active=? WHERE id=?", (now, sid))
+    c.commit(); c.close()
+    return now
 def db_get_recent_messages(sid,limit=50):
     c=get_db(); rows=c.execute("SELECT role,content FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",(sid,limit)).fetchall(); c.close()
     return [{"role":r["role"],"content":r["content"]} for r in reversed(rows)]
@@ -745,7 +788,7 @@ async def chat_stream(req):
     kw=dict(model=model,max_tokens=16000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
-    ti,to=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
+    ti,to=0,0; tcr,tcc=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
     try:
         while True:
             kw["messages"] = add_message_cache_breakpoint(list(recent))
@@ -761,6 +804,8 @@ async def chat_stream(req):
                             yield sse({"type":"text_delta","text":d.text})
                 final_msg=stream.get_final_message()
             ti+=final_msg.usage.input_tokens; to+=final_msg.usage.output_tokens
+            tcr += getattr(final_msg.usage, "cache_read_input_tokens", 0) or 0
+            tcc += getattr(final_msg.usage, "cache_creation_input_tokens", 0) or 0
             for b in final_msg.content:
                 if b.type=="thinking": tp.append(b.thinking)
             if final_msg.stop_reason!="tool_use": break
@@ -776,7 +821,9 @@ async def chat_stream(req):
                     tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
             recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
             kw["messages"]=recent
-        rt=db_add_message(req.session_id,"assistant",accumulated); saved=True
+        md_label={"claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-6":"Opus 4.6"}.get(model, model)
+        tokens_dict={"input":ti,"output":to,"cache_read":tcr,"cache_creation":tcc,"model":md_label}
+        rt=db_add_message(req.session_id,"assistant",accumulated, tokens=tokens_dict); saved=True
         try:
             c2=get_db()
             if pending_ids:
@@ -788,8 +835,7 @@ async def chat_stream(req):
         if tc: yield sse({"type":"tools","calls":tc})
         if tp: yield sse({"type":"thinking","content":"\n\n".join(tp)})
         yield sse({"type":"reply","content":accumulated,"time":rt})
-        md={"claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-6":"Opus 4.6"}
-        yield sse({"type":"done","tokens":{"input":ti,"output":to,"model":md.get(model,model)}})
+        yield sse({"type":"done","tokens":{"input":ti,"output":to,"cache_read":tcr,"cache_creation":tcc,"model":md_label}})
     except Exception as e:
         import traceback
         traceback.print_exc()
