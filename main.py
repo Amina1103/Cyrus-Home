@@ -331,6 +331,38 @@ def init_db():
         CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL UNIQUE, keys_json TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS thinking_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, message_content TEXT DEFAULT '', thinking_content TEXT NOT NULL, created_at REAL NOT NULL);
     """)
+    conn.executescript("""
+        -- messages: 最频繁查询，按 session 取消息、按 role+时间找最近用户消息、按 id 增量取
+        CREATE INDEX IF NOT EXISTS idx_messages_session_created ON messages(session_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
+        CREATE INDEX IF NOT EXISTS idx_messages_role_created ON messages(role, created_at DESC);
+
+        -- keepalive_logs: pending 查询 + 限速查询 + 日历按月查
+        CREATE INDEX IF NOT EXISTS idx_keepalive_consumed_created ON keepalive_logs(consumed, created_at);
+        CREATE INDEX IF NOT EXISTS idx_keepalive_action_created ON keepalive_logs(action, created_at);
+        CREATE INDEX IF NOT EXISTS idx_keepalive_created ON keepalive_logs(created_at);
+
+        -- events: 6 小时窗口查询 + 5 分钟去重查询
+        CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_events_type_action_created ON events(type, action, created_at);
+
+        -- whispers: 列表 + AI 限速
+        CREATE INDEX IF NOT EXISTS idx_whispers_created ON whispers(created_at);
+        CREATE INDEX IF NOT EXISTS idx_whispers_initiator_created ON whispers(initiator, created_at);
+
+        -- diaries
+        CREATE INDEX IF NOT EXISTS idx_diaries_created ON diaries(created_at);
+
+        -- reading
+        CREATE INDEX IF NOT EXISTS idx_reading_comments_book_created ON reading_comments(book_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_reading_bookmarks_book_created ON reading_bookmarks(book_id, created_at);
+
+        -- thinking_bookmarks
+        CREATE INDEX IF NOT EXISTS idx_thinking_bookmarks_session_created ON thinking_bookmarks(session_id, created_at);
+
+        -- sessions: 列表按 last_active 倒序
+        CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active DESC);
+    """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
         except: pass
