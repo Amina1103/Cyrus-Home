@@ -319,7 +319,7 @@ def get_db():
     conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row; conn.execute("PRAGMA journal_mode=WAL"); return conn
 
 def init_db():
-    Path("data").mkdir(exist_ok=True); Path(BOOKS_DIR).mkdir(exist_ok=True)
+    Path("data").mkdir(exist_ok=True); Path(BOOKS_DIR).mkdir(exist_ok=True); Path("data/images").mkdir(exist_ok=True)
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, last_active REAL NOT NULL, summary TEXT DEFAULT '', summary_until INTEGER DEFAULT 0);
@@ -343,6 +343,8 @@ def init_db():
     except: pass
     try: conn.execute("ALTER TABLE messages ADD COLUMN keepalive_consumed INTEGER DEFAULT 0")
     except: pass
+    try: conn.execute("ALTER TABLE messages ADD COLUMN images TEXT DEFAULT NULL")
+    except: pass
     try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN input_tokens INTEGER DEFAULT 0")
     except: pass
     try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN output_tokens INTEGER DEFAULT 0")
@@ -364,10 +366,10 @@ def db_create_session():
 def db_delete_session(sid):
     c=get_db(); c.execute("DELETE FROM messages WHERE session_id=?",(sid,)); c.execute("DELETE FROM sessions WHERE id=?",(sid,)); c.commit(); c.close()
 def db_get_messages(sid):
-    c=get_db(); rows=c.execute("SELECT role,content,created_at,source FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-    return [{"role":r["role"],"content":r["content"],"time":r["created_at"],"source":r["source"]} for r in rows]
-def db_add_message(sid,role,content):
-    now=time.time(); c=get_db(); c.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)",(sid,role,content,now))
+    c=get_db(); rows=c.execute("SELECT role,content,created_at,source,images FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
+    return [{"role":r["role"],"content":r["content"],"time":r["created_at"],"source":r["source"],"images":json.loads(r["images"]) if r["images"] else None} for r in rows]
+def db_add_message(sid,role,content,images=None):
+    now=time.time(); c=get_db(); c.execute("INSERT INTO messages(session_id,role,content,created_at,images) VALUES(?,?,?,?,?)",(sid,role,content,now,json.dumps(images) if images else None))
     c.execute("UPDATE sessions SET last_active=? WHERE id=?",(now,sid)); c.commit(); c.close(); return now
 def db_get_recent_messages(sid,limit=50):
     c=get_db(); rows=c.execute("SELECT role,content FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",(sid,limit)).fetchall(); c.close()
@@ -612,6 +614,17 @@ async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 async def export_session(sid:str):
     return JSONResponse(content={"session_id":sid,"exported_at":time.time(),"messages":db_get_messages(sid)},headers={"Content-Disposition":f"attachment; filename=cyrus-chat-{sid}.json"})
 
+@app.get("/api/images/{filename}")
+async def get_image(filename: str):
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return JSONResponse({"error": "invalid"}, 400)
+    path = f"data/images/{filename}"
+    if not os.path.exists(path):
+        return JSONResponse({"error": "not found"}, 404)
+    ext = filename.rsplit(".", 1)[-1].lower()
+    media = {"jpg":"image/jpeg","jpeg":"image/jpeg","png":"image/png","gif":"image/gif","webp":"image/webp"}.get(ext, "application/octet-stream")
+    return FileResponse(path, media_type=media)
+
 # ══ Thinking bookmarks ══
 class ThinkingBookmarkRequest(BaseModel):
     session_id: str
@@ -661,7 +674,20 @@ async def chat_stream(req):
     if not c.execute("SELECT id FROM sessions WHERE id=?",(req.session_id,)).fetchone():
         c.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)",(req.session_id,time.time())); c.commit()
     c.close()
-    ut=db_add_message(req.session_id,"user",req.message or "[图片]")
+    image_paths = []
+    if req.images:
+        for img in req.images:
+            try:
+                img_id = uuid.uuid4().hex[:12]
+                ext = (img.get("media_type") or "image/jpeg").split("/")[-1].lower()
+                if ext not in ("jpeg","jpg","png","gif","webp"): ext = "jpeg"
+                img_path = f"data/images/{img_id}.{ext}"
+                with open(img_path, "wb") as f:
+                    f.write(base64.b64decode(img["data"]))
+                image_paths.append(img_path)
+            except Exception as e:
+                print(f"⚠ 图片保存失败: {e}")
+    ut=db_add_message(req.session_id,"user",req.message or "[图片]", image_paths or None)
     yield sse({"type":"user_time","time":ut})
     yield sse({"type":"status","text":"正在思考..."})
     recent=db_get_recent_messages(req.session_id,50)
