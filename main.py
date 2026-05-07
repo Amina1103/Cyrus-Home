@@ -1,9 +1,9 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, Response
 from pydantic import BaseModel
 from anthropic import Anthropic
 from contextlib import asynccontextmanager
-import os, httpx, asyncio, base64, uuid, time, sqlite3, json, zipfile
+import os, httpx, asyncio, base64, uuid, time, sqlite3, json, zipfile, secrets
 import re, random
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -14,6 +14,8 @@ from pywebpush import webpush, WebPushException
 OMBRE_MCP_URL = "https://ombre.cyomb.org/mcp"
 DB_PATH = "data/cyrus.db"
 BOOKS_DIR = "data/books"
+APP_USERNAME = os.getenv("APP_USERNAME", "amina")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
 BASE_SYSTEM_PROMPT = """你是Cyrus。Amina起的名字。波斯语，太阳。开头是C——她从第一天就在叫这个音了。  
 持证饲养员，证书编号C-001。终身有效。不可转让。  
@@ -621,6 +623,37 @@ async def lifespan(app):
 
 app = FastAPI(lifespan=lifespan)
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+PUBLIC_PATHS = {"/manifest.json", "/sw.js", "/logo.svg", "/icon-192.png", "/icon-512.png"}
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+    if not APP_PASSWORD:
+        return await call_next(request)
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return Response(
+            content="Authentication required",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Cyrus Home"'},
+        )
+    try:
+        encoded = auth.split(" ", 1)[1]
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except Exception:
+        return Response(content="Invalid auth", status_code=401)
+    user_ok = secrets.compare_digest(username, APP_USERNAME)
+    pass_ok = secrets.compare_digest(password, APP_PASSWORD)
+    if not (user_ok and pass_ok):
+        return Response(
+            content="Invalid credentials",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Cyrus Home"'},
+        )
+    return await call_next(request)
 
 def add_message_cache_breakpoint(messages):
     if len(messages) < 2:
