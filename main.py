@@ -369,7 +369,7 @@ def db_get_messages(sid):
 def db_add_message(sid,role,content):
     now=time.time(); c=get_db(); c.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)",(sid,role,content,now))
     c.execute("UPDATE sessions SET last_active=? WHERE id=?",(now,sid)); c.commit(); c.close(); return now
-def db_get_recent_messages(sid,limit=20):
+def db_get_recent_messages(sid,limit=50):
     c=get_db(); rows=c.execute("SELECT role,content FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",(sid,limit)).fetchall(); c.close()
     return [{"role":r["role"],"content":r["content"]} for r in reversed(rows)]
 def db_get_session_summary(sid):
@@ -442,12 +442,12 @@ async def maybe_generate_summary(sid):
         if not s: c.close(); return
         su=s["summary_until"] or 0; msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
         if len(msgs)<=25: return
-        ts=[m for m in msgs[:-20] if m["id"]>su]
+        ts=[m for m in msgs[:-40] if m["id"]>su]
         if len(ts)<5: return
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
-        old=s["summary"] or ""; p="请用200字以内总结以下对话核心内容，保留关键事实、情感和重要信息。\n\n"
+        old=s["summary"] or ""; p="请用800字以内总结以下对话核心内容。要求：保留所有关键事实、情节发展、情感变化、重要的玩笑和调情细节。文中只出现两个人：Cyrus和Amina，不要使用'用户'、'AI'、'助手'等代词。写成Cyrus的视角。\n\n"
         p+=(f"之前的总结：{old}\n\n新增对话：\n{mt}" if old else mt)
-        r=client.messages.create(model="claude-sonnet-4-6",max_tokens=300,messages=[{"role":"user","content":p}])
+        r=client.messages.create(model="claude-sonnet-4-6",max_tokens=1200,messages=[{"role":"user","content":p}])
         c=get_db(); c.execute("UPDATE sessions SET summary=?,summary_until=? WHERE id=?",(r.content[0].text,lid,sid)); c.commit(); c.close()
     except Exception as e: print(f"⚠ 摘要失败: {e}")
 
@@ -652,7 +652,7 @@ async def chat_stream(req):
     ut=db_add_message(req.session_id,"user",req.message or "[图片]")
     yield sse({"type":"user_time","time":ut})
     yield sse({"type":"status","text":"正在思考..."})
-    recent=db_get_recent_messages(req.session_id,20)
+    recent=db_get_recent_messages(req.session_id,50)
     if req.images:
         parts=[{"type":"image","source":{"type":"base64","media_type":i.get("media_type","image/jpeg"),"data":i["data"]}} for i in req.images]
         parts.append({"type":"text","text":req.message or "看看这张图"}); recent[-1]={"role":"user","content":parts}
@@ -668,7 +668,7 @@ async def chat_stream(req):
     pending_text, pending_ids = get_pending_keepalive_records()
     if pending_text:
         sys_blocks.append({"type":"text","text":pending_text})
-    kw=dict(model=model,max_tokens=16000 if req.thinking else 1024,system=sys_blocks,messages=recent)
+    kw=dict(model=model,max_tokens=16000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
     ti,to=0,0; tp,tc=[],[]; accumulated=""; saved=False
