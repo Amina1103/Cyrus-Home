@@ -364,7 +364,20 @@ def db_list_sessions():
 def db_create_session():
     s=uuid.uuid4().hex[:8]; c=get_db(); c.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)",(s,time.time())); c.commit(); c.close(); return s
 def db_delete_session(sid):
-    c=get_db(); c.execute("DELETE FROM messages WHERE session_id=?",(sid,)); c.execute("DELETE FROM sessions WHERE id=?",(sid,)); c.commit(); c.close()
+    c = get_db()
+    rows = c.execute("SELECT images FROM messages WHERE session_id=? AND images IS NOT NULL", (sid,)).fetchall()
+    for r in rows:
+        try:
+            paths = json.loads(r["images"])
+            if paths:
+                for p in paths:
+                    try: os.remove(p)
+                    except: pass
+        except: pass
+    c.execute("DELETE FROM messages WHERE session_id=?", (sid,))
+    c.execute("DELETE FROM thinking_bookmarks WHERE session_id=?", (sid,))
+    c.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    c.commit(); c.close()
 def db_get_messages(sid):
     c=get_db(); rows=c.execute("SELECT role,content,created_at,source,images FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
     return [{"role":r["role"],"content":r["content"],"time":r["created_at"],"source":r["source"],"images":json.loads(r["images"]) if r["images"] else None} for r in rows]
