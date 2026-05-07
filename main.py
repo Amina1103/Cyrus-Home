@@ -311,7 +311,7 @@ VAPID_SUB = "mailto:olinrosita295@gmail.com"
 
 # ══ DB ══
 def get_db():
-    conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row; conn.execute("PRAGMA journal_mode=WAL"); return conn
+    conn = sqlite3.connect(DB_PATH); conn.row_factory = sqlite3.Row; conn.execute("PRAGMA journal_mode=WAL"); conn.execute("PRAGMA busy_timeout=5000"); return conn
 
 def init_db():
     Path("data").mkdir(exist_ok=True); Path(BOOKS_DIR).mkdir(exist_ok=True); Path("data/images").mkdir(exist_ok=True)
