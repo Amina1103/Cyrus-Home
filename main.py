@@ -658,6 +658,16 @@ async def lifespan(app):
     scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
+
+from starlette.requests import Request as StarletteRequest
+
+@app.middleware("http")
+async def limit_request_size(request: StarletteRequest, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 10 * 1024 * 1024:  # 10MB
+        return JSONResponse(status_code=413, content={"error": "请求体过大，上限 10MB"})
+    return await call_next(request)
+
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 import hmac, hashlib
