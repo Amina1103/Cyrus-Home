@@ -365,27 +365,27 @@ def init_db():
     """)
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
-        except: pass
+        except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN source TEXT DEFAULT NULL")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN keepalive_consumed INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN images TEXT DEFAULT NULL")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN input_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE keepalive_logs ADD COLUMN output_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN input_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN output_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN model TEXT DEFAULT NULL")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def db_get_profile():
@@ -409,8 +409,9 @@ def db_delete_session(sid):
             if paths:
                 for p in paths:
                     try: os.remove(p)
-                    except: pass
-        except: pass
+                    except OSError as e: print(f"⚠ 删除图片失败 {p}: {e}")
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"⚠ 解析图片路径失败: {e}")
     c.execute("DELETE FROM messages WHERE session_id=?", (sid,))
     c.execute("DELETE FROM thinking_bookmarks WHERE session_id=?", (sid,))
     c.execute("DELETE FROM sessions WHERE id=?", (sid,))
@@ -530,7 +531,8 @@ def get_epub_title(fp):
                 if n.endswith('.opf'):
                     with z.open(n) as f: root=ET.parse(f).getroot(); el=root.find('.//{http://purl.org/dc/elements/1.1/}title')
                     if el is not None and el.text: return el.text.strip()
-    except: pass
+    except Exception as e:
+        print(f"⚠ 读取 epub 标题失败 {fp}: {e}")
     return ""
 
 # ══ Summary ══
@@ -898,7 +900,7 @@ async def chat_stream(req):
         try:
             mem=await call_ombre("breath",{})
             if mem: sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{mem}"})
-        except: pass
+        except Exception as e: print(f"⚠ chat 浮现记忆失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
     if pending_text:
         sys_blocks.append({"type":"text","text":pending_text})
@@ -948,7 +950,7 @@ async def chat_stream(req):
                 c2.execute(f"UPDATE keepalive_logs SET consumed=1 WHERE id IN ({ph})", pending_ids)
             c2.execute("UPDATE messages SET keepalive_consumed=1 WHERE session_id=? AND source='keepalive' AND keepalive_consumed=0", (req.session_id,))
             c2.commit(); c2.close()
-        except: pass
+        except Exception as e: print(f"⚠ 标记 keepalive consumed 失败: {e}")
         if tc: yield sse({"type":"tools","calls":tc})
         if tp: yield sse({"type":"thinking","content":"\n\n".join(tp)})
         yield sse({"type":"reply","content":accumulated,"time":rt})
@@ -961,13 +963,13 @@ async def chat_stream(req):
         yield sse({"type":"error","text":f"出错了：{error_msg}"})
         if not saved and accumulated:
             try: db_add_message(req.session_id,"assistant",accumulated+"\n\n[出错中断]"); saved=True
-            except: pass
+            except Exception as e2: print(f"⚠ 保存中断消息失败: {e2}")
     finally:
         if not saved and accumulated and not error_occurred:
             try: db_add_message(req.session_id,"assistant",accumulated+"\n\n[已停止]")
-            except: pass
+            except Exception as e: print(f"⚠ 保存停止消息失败: {e}")
     try: await maybe_generate_summary(req.session_id)
-    except: pass
+    except Exception as e: print(f"⚠ 触发摘要失败: {e}")
 
 # ══ Whispers (悄悄话) ══
 class WhisperCreate(BaseModel):
@@ -1050,7 +1052,7 @@ async def create_whisper(req: WhisperCreate):
     try:
         memory = ""
         try: memory = await call_ombre("breath", {"query": req.content})
-        except: pass
+        except Exception as e: print(f"⚠ whisper breath 失败: {e}")
         recent_context = get_recent_chat_context()
         sys_blocks = build_whisper_blocks()
         if memory: sys_blocks.append({"type":"text","text":f"相关记忆：\n{memory}"})
@@ -1220,7 +1222,7 @@ async def keepalive_check():
         sys_blocks = build_system_blocks()
         memory = ""
         try: memory = await call_ombre("breath", {})
-        except: pass
+        except Exception as e: print(f"⚠ keepalive breath 失败: {e}")
         events_str = get_recent_events()
         events_context = f"感知到的动静：\n{events_str}" if events_str else ""
         recent_context = get_recent_chat_context()
@@ -1374,7 +1376,8 @@ async def send_push_notification(title, body, url="/", force=False):
             try:
                 if time.time() - float(last["value"]) < 7200:
                     c.close(); return
-            except: pass
+            except (ValueError, TypeError) as e:
+                print(f"⚠ 解析 last_push_time 失败: {e}")
     subs = c.execute("SELECT id, endpoint, keys_json FROM push_subscriptions").fetchall()
     c.close()
     if not subs: return
@@ -1385,7 +1388,9 @@ async def send_push_notification(title, body, url="/", force=False):
         return webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_SUB})
     for sub in subs:
         try: keys = json.loads(sub["keys_json"])
-        except: continue
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"⚠ 解析 push keys 失败 (sub_id={sub['id']}): {e}")
+            continue
         sub_info = {"endpoint": sub["endpoint"], "keys": keys}
         try:
             await asyncio.to_thread(_push, sub_info)
@@ -1397,14 +1402,14 @@ async def send_push_notification(title, body, url="/", force=False):
             if sc in (404, 410):
                 try:
                     c2 = get_db(); c2.execute("DELETE FROM push_subscriptions WHERE id=?", (sub["id"],)); c2.commit(); c2.close()
-                except: pass
+                except Exception as e: print(f"⚠ 清理过期 push 订阅失败: {e}")
         except Exception as e:
             print(f"⚠ push 错误: {e}")
     if sent:
         try:
             now_s = str(time.time())
             c2 = get_db(); c2.execute("INSERT INTO settings(key,value) VALUES('last_push_time',?) ON CONFLICT(key) DO UPDATE SET value=?", (now_s, now_s)); c2.commit(); c2.close()
-        except: pass
+        except Exception as e: print(f"⚠ 更新 last_push_time 失败: {e}")
 
 @app.get("/api/push/vapid-key")
 async def push_vapid_key():
@@ -1515,7 +1520,7 @@ async def delete_book(bid:str):
     c=get_db(); b=c.execute("SELECT file_path FROM books WHERE id=?",(bid,)).fetchone()
     if b:
         try: os.remove(b["file_path"])
-        except: pass
+        except OSError as e: print(f"⚠ 删除 epub 文件失败: {e}")
     c.execute("DELETE FROM reading_comments WHERE book_id=?",(bid,)); c.execute("DELETE FROM reading_progress WHERE book_id=?",(bid,))
     c.execute("DELETE FROM reading_bookmarks WHERE book_id=?",(bid,)); c.execute("DELETE FROM books WHERE id=?",(bid,)); c.commit(); c.close(); return {"ok":True}
 
@@ -1544,7 +1549,7 @@ async def init_reading(req:ReadingInitRequest):
     c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
     t=b["title"] if b else ""; profile=db_get_profile(); memory=""
     try: memory=await call_ombre("breath",{"query":t})
-    except: pass
+    except Exception as e: print(f"⚠ reading init breath 失败: {e}")
     reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t}
     reading_conversations[req.book_id]=[]
     return {"ok":True,"has_memory":bool(memory)}
