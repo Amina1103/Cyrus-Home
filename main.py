@@ -968,7 +968,7 @@ async def chat_stream(req):
         sys_blocks.append({"type":"text","text":pending_text})
     kw=dict(model=model,max_tokens=16000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
-    if req.thinking: kw["thinking"]={"type":"adaptive","budget_tokens":10000}
+    if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":10000}
     ti,to=0,0; tcr,tcc=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
     try:
         while True:
@@ -1447,7 +1447,7 @@ async def _do_warmup(cfg_row):
         if all_tools:
             kw["tools"] = all_tools
         if thinking_on:
-            kw["thinking"] = {"type": "adaptive", "budget_tokens": budget}
+            kw["thinking"] = {"type": "enabled", "budget_tokens": budget}
             kw["max_tokens"] = budget + 1
         else:
             kw["max_tokens"] = 1
