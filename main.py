@@ -974,8 +974,6 @@ async def chat_stream(req):
     model=req.model if req.model in allowed else "claude-sonnet-4-6"
     sys_blocks=build_system_blocks(req.session_id)
     tool_state = get_session_tool_state(req.session_id)
-    if tool_state:
-        sys_blocks.append({"type":"text","text":tool_state})
     # 持久化本次配置，供 cache_warmup 使用同样的桶预热
     try:
         cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id, "budget_tokens": 10000 if req.thinking else 0})
@@ -1001,21 +999,69 @@ async def chat_stream(req):
     try:
         while True:
             fresh_state = get_session_tool_state(req.session_id)
-            kw["system"] = [b for b in sys_blocks if not (isinstance(b, dict) and b.get("text","").startswith("[工具状态]"))]
-            if fresh_state:
-                kw["system"].append({"type":"text","text":fresh_state})
             kw["messages"] = add_message_cache_breakpoint(list(recent))
-            with client.messages.stream(**kw) as stream:
-                for event in stream:
-                    et=getattr(event,"type",None)
-                    if et=="content_block_delta":
-                        d=event.delta; dt=getattr(d,"type",None)
-                        if dt=="thinking_delta":
-                            yield sse({"type":"thinking_delta","text":d.thinking})
-                        elif dt=="text_delta":
-                            accumulated+=d.text
-                            yield sse({"type":"text_delta","text":d.text})
-                final_msg=stream.get_final_message()
+            if fresh_state:
+                msgs = kw["messages"]
+                for i in range(len(msgs) - 1, -1, -1):
+                    m = msgs[i]
+                    if m.get("role") != "user":
+                        continue
+                    content = m.get("content")
+                    if isinstance(content, str):
+                        msgs[i] = {"role": "user", "content": content + "\n\n" + fresh_state}
+                    elif isinstance(content, list):
+                        new_content = list(content)
+                        new_content.append({"type": "text", "text": fresh_state})
+                        msgs[i] = {"role": "user", "content": new_content}
+                    else:
+                        msgs[i] = {"role": "user", "content": fresh_state}
+                    break
+            ev_queue: asyncio.Queue = asyncio.Queue()
+            first_event = asyncio.Event()
+            final_holder = {}
+            loop = asyncio.get_event_loop()
+            async def _heartbeat():
+                while not first_event.is_set():
+                    try:
+                        await asyncio.wait_for(first_event.wait(), timeout=15)
+                    except asyncio.TimeoutError:
+                        ev_queue.put_nowait(("hb", None))
+            def _stream_worker():
+                try:
+                    with client.messages.stream(**kw) as stream:
+                        for event in stream:
+                            loop.call_soon_threadsafe(ev_queue.put_nowait, ("ev", event))
+                        final_holder["final"] = stream.get_final_message()
+                except Exception as e:
+                    final_holder["error"] = e
+                finally:
+                    loop.call_soon_threadsafe(ev_queue.put_nowait, ("done", None))
+            hb_task = asyncio.create_task(_heartbeat())
+            worker_task = asyncio.create_task(asyncio.to_thread(_stream_worker))
+            while True:
+                kind, payload = await ev_queue.get()
+                if kind == "done":
+                    break
+                if kind == "hb":
+                    yield ": keepalive\n\n"
+                    continue
+                if not first_event.is_set():
+                    first_event.set()
+                event = payload
+                et = getattr(event, "type", None)
+                if et == "content_block_delta":
+                    d = event.delta; dt = getattr(d, "type", None)
+                    if dt == "thinking_delta":
+                        yield sse({"type":"thinking_delta","text":d.thinking})
+                    elif dt == "text_delta":
+                        accumulated += d.text
+                        yield sse({"type":"text_delta","text":d.text})
+            first_event.set()
+            await hb_task
+            await worker_task
+            if "error" in final_holder:
+                raise final_holder["error"]
+            final_msg = final_holder["final"]
             ti+=final_msg.usage.input_tokens; to+=final_msg.usage.output_tokens
             tcr += getattr(final_msg.usage, "cache_read_input_tokens", 0) or 0
             tcc += getattr(final_msg.usage, "cache_creation_input_tokens", 0) or 0
