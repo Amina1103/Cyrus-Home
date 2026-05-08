@@ -573,12 +573,12 @@ def get_epub_title(fp):
     return ""
 
 # ══ Summary ══
-async def maybe_generate_summary(sid):
+async def maybe_generate_summary(sid, force=False):
     try:
         c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
         if not s: c.close(); return
         su=int(s["summary_until"] or 0); msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-        if len(msgs)<=60: return
+        if len(msgs)<=60 and not force: return
         ts=[m for m in msgs[:-100] if m["id"]>su]
         if len(ts)<5: return
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
@@ -861,6 +861,14 @@ async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 @app.get("/api/sessions/{sid}/export")
 async def export_session(sid:str):
     return JSONResponse(content={"session_id":sid,"exported_at":time.time(),"messages":db_get_messages(sid)},headers={"Content-Disposition":f"attachment; filename=cyrus-chat-{sid}.json"})
+
+@app.post("/api/sessions/{sid}/summarize")
+async def manual_summarize(sid: str):
+    try:
+        await maybe_generate_summary(sid, force=True)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/images/{filename}")
 async def get_image(filename: str):
