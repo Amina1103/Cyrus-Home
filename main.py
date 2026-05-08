@@ -615,8 +615,13 @@ async def do_web_search(q):
     from duckduckgo_search import DDGS
     def _s():
         with DDGS() as d: return list(d.text(q,max_results=5))
-    try: r=await asyncio.to_thread(_s); return "\n\n".join(f"标题: {x['title']}\n摘要: {x['body']}\n链接: {x['href']}" for x in r) if r else "没有找到"
-    except Exception as e: return f"搜索失败: {e}"
+    try:
+        r=await asyncio.to_thread(_s)
+        if not r: print(f"[web_search] 空结果: query={q}")
+        return "\n\n".join(f"标题: {x['title']}\n摘要: {x['body']}\n链接: {x['href']}" for x in r) if r else "没有找到"
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return f"搜索失败: {e}"
 
 async def do_web_fetch(url):
     from bs4 import BeautifulSoup
