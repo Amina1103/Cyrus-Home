@@ -1278,9 +1278,6 @@ async def unified_heartbeat():
         if idle < 2700:
             print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，不足 45 分钟")
             c.close(); return
-        if idle > 10800:
-            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 3 小时，停止")
-            c.close(); return
         # ── Phase 1: Keepalive（idle >= 55 分钟才触发）──
         if idle >= 3300:
             last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
@@ -1294,10 +1291,14 @@ async def unified_heartbeat():
             else:
                 reason = "开关已关闭" if not toggle_on else f"距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟"
                 print(f"Heartbeat: 跳过 keepalive（{reason}）")
-        # ── Phase 2: Cache warmup（始终执行）──
-        cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
-        c.close()
-        await _do_warmup(cfg_row)
+        # ── Phase 2: Cache warmup（仅 3 小时内，超过不划算）──
+        if idle <= 10800:
+            cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
+            c.close()
+            await _do_warmup(cfg_row)
+        else:
+            c.close()
+            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 3 小时，跳过 warmup")
     except Exception as e:
         import traceback
         print(f"Heartbeat error: {e}")
