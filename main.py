@@ -960,6 +960,7 @@ async def chat_stream(req):
         try:
             mem=await call_ombre("breath",{})
             if mem: sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{mem}"})
+            yield sse({"type":"tools","calls":[{"name":"breath","input":{},"result_preview":mem[:200] if mem else "（空）"}]})
         except Exception as e: print(f"⚠ chat 浮现记忆失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
     if pending_text:
