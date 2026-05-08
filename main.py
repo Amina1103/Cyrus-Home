@@ -472,7 +472,27 @@ def db_get_messages_since_summary(sid, max_messages=200):
         (sid, until, max_messages)
     ).fetchall()
     c.close()
-    return [{"role": r["role"], "content": r["content"]} for r in rows]
+    result = [{"role": r["role"], "content": r["content"]} for r in rows]
+    if len(result) > 40:
+        for msg in result[:-40]:
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                new_content = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "image":
+                        new_content.append({"type": "text", "text": "[图片]"})
+                    elif isinstance(block, dict) and block.get("type") == "tool_result":
+                        text = str(block.get("content", ""))
+                        if len(text) > 200:
+                            block["content"] = text[:200] + "...(已截断)"
+                        new_content.append(block)
+                    else:
+                        new_content.append(block)
+                msg["content"] = new_content
+            elif isinstance(content, str) and msg.get("role") == "tool":
+                if len(content) > 200:
+                    msg["content"] = content[:200] + "...(已截断)"
+    return result
 def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
