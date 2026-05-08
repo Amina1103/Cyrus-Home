@@ -598,8 +598,8 @@ async def maybe_generate_summary(sid, force=False):
         c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
         if not s: c.close(); return
         su=int(s["summary_until"] or 0); msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-        if len(msgs)<=60 and not force: return
-        ts=[m for m in msgs[:-100] if m["id"]>su]
+        if len(msgs)<=120 and not force: return
+        ts=[m for m in msgs[:-70] if m["id"]>su]
         if len(ts)<5: return
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
         old=s["summary"] or ""; p="""请用2000-3000字记录以下对话。不是概括"发生了什么"，而是保留对话本身。要求：
