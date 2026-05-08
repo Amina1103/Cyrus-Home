@@ -1670,7 +1670,7 @@ async def reading_comment(req:CommentRequest):
     resp=client.messages.create(model=model,max_tokens=200,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
-    return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
+    return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
 
 @app.post("/api/reading/highlight")
 async def reading_highlight(req:HighlightRequest):
@@ -1685,7 +1685,7 @@ async def reading_highlight(req:HighlightRequest):
     resp=client.messages.create(model=model,max_tokens=300,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
-    return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"model":model}}
+    return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
 
 @app.post("/api/reading/progress")
 async def save_progress(req:ProgressRequest):
