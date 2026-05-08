@@ -882,6 +882,14 @@ async def manual_summarize(sid: str):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.get("/api/sessions/{sid}/summary")
+async def get_summary(sid: str):
+    c = get_db()
+    s = c.execute("SELECT summary, summary_until FROM sessions WHERE id=?", (sid,)).fetchone()
+    c.close()
+    if not s: return {"summary": "", "summary_until": 0}
+    return {"summary": s["summary"] or "", "summary_until": int(s["summary_until"] or 0)}
+
 @app.get("/api/images/{filename}")
 async def get_image(filename: str):
     if "/" in filename or "\\" in filename or ".." in filename:
