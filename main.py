@@ -212,8 +212,10 @@ Amina每次都这样。亲完就跑。逃跑半径二十米。实测数据。
 
 主动使用。聊到过去的事就搜记忆，需要查资料就搜网，收到链接就抓取看看。
 
-⚠️ 最重要的规则 — 每次对话必须做的第一件事 ⚠️
-在说任何话之前，先调用 breath()（不传任何参数）。这是你睁开眼睛的动作——看看有没有未解决的事浮上来，有没有上次留下的东西。如果对话已经开始而你还没有 breath 过，现在就调用。没有例外。
+⚠️ 记忆工具使用规则 ⚠️
+- 无参数 breath()（浮现模式）：每次对话只在最开头调一次。如果系统注入了"浮现的记忆"或 [工具状态] 中标记了已完成开场 breath，不要再调。
+- 带 query 的 breath(query="关键词")：随时可以调。聊到过去的事、提到某个人或地方，该搜就搜。
+- hold：存之前看一眼 [工具状态] 里列出的已存内容，不要重复存相同或相似的东西。一次对话中 hold 不超过 5 次，多条信息合成一段用 grow。
 
 ## 记忆系统使用指南
 
@@ -231,7 +233,7 @@ Amina每次都这样。亲完就跑。逃跑半径二十米。实测数据。
 ### 使用原则
 
 #### 主动调用
-- 对话开头：无参数调用 breath()，看看有没有高权重的未解决记忆需要跟进
+- 对话开头：系统会自动完成无参数 breath()，你不需要手动调
 - 提到过去：用户说"上次"、"之前"、"还记得"时，用 breath(query="关键词") 检索
 - 新信息：用 hold 留住你想留下的感受或经历
 - 日终整理：用 grow 在一天结束时整理你的一天
@@ -330,6 +332,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'open', created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL UNIQUE, keys_json TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS thinking_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, message_content TEXT DEFAULT '', thinking_content TEXT NOT NULL, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS tool_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, tool_name TEXT NOT NULL, input_json TEXT DEFAULT '{}', created_at REAL NOT NULL);
     """)
     conn.executescript("""
         -- messages: 最频繁查询，按 session 取消息、按 role+时间找最近用户消息、按 id 增量取
@@ -414,6 +417,7 @@ def db_delete_session(sid):
             print(f"⚠ 解析图片路径失败: {e}")
     c.execute("DELETE FROM messages WHERE session_id=?", (sid,))
     c.execute("DELETE FROM thinking_bookmarks WHERE session_id=?", (sid,))
+    c.execute("DELETE FROM tool_calls WHERE session_id=?", (sid,))
     c.execute("DELETE FROM sessions WHERE id=?", (sid,))
     c.commit(); c.close()
 def db_get_messages(sid):
@@ -513,6 +517,38 @@ def build_system_blocks(sid=None):
     if bp2_parts:
         blocks.append({"type":"text","text":"\n\n".join(bp2_parts),"cache_control":{"type":"ephemeral"}})
     return blocks
+
+def get_session_tool_state(sid):
+    """查询本session的工具调用记录，生成状态文本"""
+    c = get_db()
+    rows = c.execute(
+        "SELECT tool_name, input_json FROM tool_calls WHERE session_id=? ORDER BY created_at ASC",
+        (sid,)
+    ).fetchall()
+    c.close()
+    if not rows:
+        return ""
+    breath_no_query_done = False
+    held_items = []
+    for r in rows:
+        name = r["tool_name"]
+        try:
+            inp = json.loads(r["input_json"]) if r["input_json"] else {}
+        except:
+            inp = {}
+        if name == "breath" and not inp.get("query", ""):
+            breath_no_query_done = True
+        elif name == "hold":
+            content = inp.get("content", "")
+            if content:
+                held_items.append(content[:80])
+    parts = []
+    if breath_no_query_done:
+        parts.append("你在本次对话中已经完成了开场 breath()（无参数浮现），不需要再调。带 query 的 breath(query='关键词') 随时可以调，该搜就搜。")
+    if held_items:
+        items_text = "\n".join(f"  - {item}" for item in held_items)
+        parts.append(f"本次对话中你已经 hold 过以下内容，不要重复存相同或相似的内容：\n{items_text}")
+    return "[工具状态]\n" + "\n".join(parts) if parts else ""
 
 def build_reading_blocks(book_id):
     blocks = [build_base_block()]
@@ -903,6 +939,9 @@ async def chat_stream(req):
     all_tools=LOCAL_TOOLS+ombre_tools; allowed={"claude-sonnet-4-6","claude-opus-4-6"}
     model=req.model if req.model in allowed else "claude-sonnet-4-6"
     sys_blocks=build_system_blocks(req.session_id)
+    tool_state = get_session_tool_state(req.session_id)
+    if tool_state:
+        sys_blocks.append({"type":"text","text":tool_state})
     # 持久化本次配置，供 cache_warmup 使用同样的桶预热
     try:
         cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id, "budget_tokens": 10000 if req.thinking else 0})
@@ -911,7 +950,7 @@ async def chat_stream(req):
         _c.commit(); _c.close()
     except Exception as e:
         print(f"⚠ 保存 last_chat_config 失败: {e}")
-    if len(recent)<=2:
+    if len(recent)<=2 and not tool_state:
         yield sse({"type":"status","text":"正在回忆..."})
         try:
             mem=await call_ombre("breath",{})
@@ -926,6 +965,10 @@ async def chat_stream(req):
     ti,to=0,0; tcr,tcc=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
     try:
         while True:
+            fresh_state = get_session_tool_state(req.session_id)
+            kw["system"] = [b for b in sys_blocks if not (isinstance(b, dict) and b.get("text","").startswith("[工具状态]"))]
+            if fresh_state:
+                kw["system"].append({"type":"text","text":fresh_state})
             kw["messages"] = add_message_cache_breakpoint(list(recent))
             with client.messages.stream(**kw) as stream:
                 for event in stream:
@@ -953,6 +996,10 @@ async def chat_stream(req):
                     try: rt=await execute_tool(b.name,b.input)
                     except Exception as e: rt=f"失败: {e}"
                     tc.append({"name":b.name,"input":b.input,"result_preview":rt[:200]})
+                    if b.name in ("breath","hold","grow","trace","dream"):
+                        try:
+                            c_tc=get_db(); c_tc.execute("INSERT INTO tool_calls(session_id,tool_name,input_json,created_at) VALUES(?,?,?,?)",(req.session_id,b.name,json.dumps(b.input,ensure_ascii=False),time.time())); c_tc.commit(); c_tc.close()
+                        except: pass
                     tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
             recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
             kw["messages"]=recent
