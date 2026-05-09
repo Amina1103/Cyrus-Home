@@ -282,7 +282,20 @@ async function openReader(bookId,title){
         rendition.on('relocated',loc=>{
             currentCfi=loc.start.cfi;
             fetch('/api/reading/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId,cfi:loc.start.cfi,page:loc.start.displayed?loc.start.displayed.page:0})}).catch(()=>{});
-            try{var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''}catch(e){}
+            (async()=>{try{
+                if(loc.start.cfi&&loc.end&&loc.end.cfi){
+                    const sr=await epubBook.getRange(loc.start.cfi);
+                    const er=await epubBook.getRange(loc.end.cfi);
+                    if(sr&&er&&sr.startContainer.ownerDocument===er.startContainer.ownerDocument){
+                        const r=sr.startContainer.ownerDocument.createRange();
+                        r.setStart(sr.startContainer,sr.startOffset);
+                        r.setEnd(er.startContainer,er.startOffset);
+                        const t=r.toString().trim();
+                        if(t){currentPageText=t;return}
+                    }
+                }
+                var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''
+            }catch(e){try{var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''}catch(e2){}}})();
             if(loc.start.displayed)$('pageInfo').textContent=loc.start.displayed.page+' / '+loc.start.displayed.total;
             updateBmBtn();
         });
