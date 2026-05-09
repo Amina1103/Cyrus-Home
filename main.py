@@ -321,6 +321,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reading_progress (book_id TEXT PRIMARY KEY, current_cfi TEXT DEFAULT '', current_page INTEGER DEFAULT 0, updated_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, page_text TEXT DEFAULT '', comment TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS reading_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, cfi TEXT NOT NULL, label TEXT DEFAULT '', created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS reading_favorites (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id TEXT NOT NULL, comment TEXT NOT NULL, context TEXT DEFAULT '', book_title TEXT DEFAULT '', chapter TEXT DEFAULT '', created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS whispers (id INTEGER PRIMARY KEY AUTOINCREMENT, initiator TEXT NOT NULL DEFAULT 'user', content TEXT NOT NULL, reply1 TEXT DEFAULT '', reply2 TEXT DEFAULT '', status TEXT DEFAULT 'pending', favorited INTEGER DEFAULT 0, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS keepalive_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, thoughts TEXT NOT NULL, action TEXT NOT NULL DEFAULT 'none', content TEXT DEFAULT '', consumed INTEGER DEFAULT 0, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS diaries (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at REAL NOT NULL);
@@ -1760,6 +1761,12 @@ class ReadingGrowRequest(BaseModel):
     page: int = 0
     total: int = 0
     chapter: str = ""
+class FavoriteRequest(BaseModel):
+    book_id: str
+    comment: str
+    context: str = ""
+    book_title: str = ""
+    chapter: str = ""
 
 @app.post("/api/reading/init")
 async def init_reading(req:ReadingInitRequest):
@@ -1854,6 +1861,38 @@ async def reading_grow(req: ReadingGrowRequest):
         return {"ok": True, "result": result}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+@app.post("/api/reading/favorite")
+async def favorite_comment(req: FavoriteRequest):
+    c = get_db()
+    c.execute("INSERT INTO reading_favorites(book_id, comment, context, book_title, chapter, created_at) VALUES(?,?,?,?,?,?)",
+              (req.book_id, req.comment, req.context, req.book_title, req.chapter, time.time()))
+    c.commit(); c.close()
+    return {"ok": True}
+
+@app.get("/api/reading/favorites")
+async def get_all_favorites():
+    c = get_db()
+    rows = c.execute("SELECT id, book_id, comment, context, book_title, chapter, created_at FROM reading_favorites ORDER BY created_at DESC").fetchall()
+    c.close()
+    books = {}
+    for r in rows:
+        bid = r["book_id"]
+        if bid not in books:
+            books[bid] = {"title": r["book_title"] or "未知书名", "favorites": []}
+        books[bid]["favorites"].append({
+            "id": r["id"], "comment": r["comment"],
+            "context": r["context"], "chapter": r["chapter"],
+            "time": r["created_at"]
+        })
+    return {"books": list(books.values())}
+
+@app.delete("/api/reading/favorite/{fid}")
+async def delete_favorite(fid: int):
+    c = get_db()
+    c.execute("DELETE FROM reading_favorites WHERE id=?", (fid,))
+    c.commit(); c.close()
+    return {"ok": True}
 
 @app.post("/api/reading/close")
 async def close_reading(req:ReadingInitRequest):
