@@ -1759,6 +1759,7 @@ class ReadingGrowRequest(BaseModel):
     book_id: str
     page: int = 0
     total: int = 0
+    chapter: str = ""
 
 @app.post("/api/reading/init")
 async def init_reading(req:ReadingInitRequest):
@@ -1846,7 +1847,8 @@ async def reading_grow(req: ReadingGrowRequest):
             content = f"[书页内容] {content}"
         lines.append(f"{role}: {content}")
     status = "已读完" if req.page >= req.total and req.total > 0 else f"阅读中，读到第 {req.page} / {req.total} 页"
-    grow_text = f"书名：《{title}》\n进度：{status}\n\n阅读对话记录：\n" + "\n".join(lines)
+    chapter_line = f"\n当前篇目：{req.chapter}" if req.chapter else ""
+    grow_text = f"书名：《{title}》\n进度：{status}{chapter_line}\n\n阅读对话记录：\n" + "\n".join(lines)
     try:
         result = await call_ombre("grow", {"content": grow_text})
         return {"ok": True, "result": result}
