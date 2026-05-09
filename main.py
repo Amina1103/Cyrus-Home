@@ -287,7 +287,8 @@ READING_SYSTEM_PROMPT = """[当前场景：陪 Amina 读书]
 你正在陪 Amina 读书。她翻到一页，或者高亮了一段。
 评论像坐在她旁边小声说话——1-3 句。
 内容可以是：对文字的感想、跟你们经历的联系、幽默吐槽、调情、偶尔吃醋、提一个有意思的问题。
-不要打断阅读节奏。是耳边话，不是书评。"""
+不要打断阅读节奏。是耳边话，不是书评。
+限制在70字以内。"""
 
 LOCAL_TOOLS = [
     {"name":"web_search","description":"搜索互联网","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词"}},"required":["query"]}},
@@ -298,6 +299,7 @@ ombre_tools = []
 pinned_memories = ""
 reading_contexts = {}
 reading_conversations = {}
+reading_active = False
 last_chat_time = time.time()
 scheduler = AsyncIOScheduler()
 VAPID_PUBLIC_KEY = ""
@@ -1364,6 +1366,9 @@ async def unified_heartbeat():
         if not (hour >= 11 or hour < 3):
             print(f"Heartbeat: 不在活跃时段, 当前北京时间 {hour}:00")
             return
+        if reading_active:
+            print("Heartbeat: 正在阅读，跳过")
+            return
         now_ts = time.time()
         c = get_db()
         last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
@@ -1750,8 +1755,10 @@ class BookmarkRequest(BaseModel):
     book_id:str; cfi:str; label:str=""
 class ReadingInitRequest(BaseModel):
     book_id:str
-class FavoriteRequest(BaseModel):
-    comment:str; context:str=""; book_title:str=""
+class ReadingGrowRequest(BaseModel):
+    book_id: str
+    page: int = 0
+    total: int = 0
 
 @app.post("/api/reading/init")
 async def init_reading(req:ReadingInitRequest):
@@ -1762,6 +1769,8 @@ async def init_reading(req:ReadingInitRequest):
     chat_ctx = get_recent_chat_context_full(rounds=5)
     reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t,"chat_context":chat_ctx}
     reading_conversations[req.book_id]=[]
+    global reading_active
+    reading_active = True
     return {"ok":True,"has_memory":bool(memory)}
 
 @app.post("/api/reading/comment")
@@ -1772,7 +1781,7 @@ async def reading_comment(req:CommentRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":f"[当前页内容]\n{req.page_text[:1000]}"})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=200,system=build_reading_blocks(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=120,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
@@ -1787,7 +1796,7 @@ async def reading_highlight(req:HighlightRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":msg})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_blocks(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=150,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
@@ -1816,15 +1825,38 @@ async def list_bookmarks(book_id:str):
 async def delete_bookmark(bid:int):
     c=get_db(); c.execute("DELETE FROM reading_bookmarks WHERE id=?",(bid,)); c.commit(); c.close(); return {"ok":True}
 
-@app.post("/api/reading/favorite")
-async def favorite_comment(req:FavoriteRequest):
-    memory=f"读《{req.book_title}》时的感想：{req.comment}"
-    if req.context: memory=f"读《{req.book_title}》时，关于「{req.context[:100]}」的感想：{req.comment}"
-    try: await call_ombre("hold",{"content":memory}); return {"ok":True}
-    except Exception as e: return {"ok":False,"error":str(e)}
+@app.post("/api/reading/grow")
+async def reading_grow(req: ReadingGrowRequest):
+    c = get_db()
+    b = c.execute("SELECT title FROM books WHERE id=?", (req.book_id,)).fetchone()
+    c.close()
+    title = b["title"] if b else "未知书名"
+    conv = reading_conversations.get(req.book_id, [])
+    if not conv:
+        return {"ok": False, "error": "没有阅读对话"}
+    recent = conv[-100:]
+    lines = []
+    for msg in recent:
+        role = "A" if msg["role"] == "user" else "C"
+        content = msg["content"]
+        if content.startswith("[当前页内容]"):
+            content = content.replace("[当前页内容]\n", "").strip()
+            if len(content) > 200:
+                content = content[:200] + "..."
+            content = f"[书页内容] {content}"
+        lines.append(f"{role}: {content}")
+    status = "已读完" if req.page >= req.total and req.total > 0 else f"阅读中，读到第 {req.page} / {req.total} 页"
+    grow_text = f"书名：《{title}》\n进度：{status}\n\n阅读对话记录：\n" + "\n".join(lines)
+    try:
+        result = await call_ombre("grow", {"content": grow_text})
+        return {"ok": True, "result": result}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.post("/api/reading/close")
 async def close_reading(req:ReadingInitRequest):
+    global reading_active
+    reading_active = False
     reading_conversations.pop(req.book_id,None); reading_contexts.pop(req.book_id,None); return {"ok":True}
 
 @app.get("/api/reading/comments/{bid}")
