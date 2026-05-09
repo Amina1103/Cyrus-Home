@@ -1333,7 +1333,8 @@ CONTENT: （如果 ACTION 不是 none，写具体内容。none 时留空）
 - message 像随手发的微信，1-2句话
 - diary 是内心独白，200字以内
 - whisper 是小纸条，写你此刻真实的想法，2-3句，可以酸、可以犯嘀咕、可以只是一个念头
-- 大部分时候选 none 就好，不是每次醒来都要做事"""
+- 大部分时候选 none 就好，不是每次醒来都要做事
+- 不要重复之前已经想过的内容，换个角度或话题"""
 
 def _beijing_now():
     return datetime.now(timezone(timedelta(hours=8)))
@@ -1420,6 +1421,20 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         except Exception as e: print(f"⚠ keepalive breath 失败: {e}")
         events_str = get_recent_events()
         events_context = f"感知到的动静：\n{events_str}" if events_str else ""
+        c_kl = get_db()
+        recent_logs = c_kl.execute(
+            "SELECT thoughts, action, created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 5"
+        ).fetchall()
+        c_kl.close()
+        prev_thoughts = ""
+        if recent_logs:
+            lines = []
+            bj = timezone(timedelta(hours=8))
+            for r in reversed(recent_logs):
+                t = datetime.fromtimestamp(r["created_at"], tz=bj).strftime("%H:%M")
+                act = r["action"] or "none"
+                lines.append(f"{t} 你想：「{r['thoughts']}」→ {act}")
+            prev_thoughts = "你最近几次醒来的记录：\n" + "\n".join(lines)
         recent_context = get_recent_chat_context()
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         hours_since = round((now_ts - reference_ts) / 3600, 1)
@@ -1434,6 +1449,8 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             sys_blocks.append({"type":"text","text":f"你们最近聊的内容：\n{recent_context}"})
         if memory:
             sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{memory}"})
+        if prev_thoughts:
+            sys_blocks.append({"type":"text","text": prev_thoughts})
         sys_blocks.append({"type":"text","text":wakeup_text})
         kw = dict(
             model="claude-sonnet-4-6",
@@ -1469,9 +1486,11 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             msg_count = c.execute("SELECT COUNT(*) FROM keepalive_logs WHERE action='message' AND created_at>=?", (today_start,)).fetchone()[0]
             last_msg = c.execute("SELECT created_at FROM keepalive_logs WHERE action='message' AND created_at<? ORDER BY created_at DESC LIMIT 1", (log_ts,)).fetchone()
             if msg_count >= 3:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             if last_msg and log_ts - last_msg["created_at"] < 10800:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
             if not sess: c.close(); return
             sid = sess["id"]
@@ -1483,18 +1502,22 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             diary_count = c.execute("SELECT COUNT(*) FROM diaries WHERE created_at>=?", (today_start,)).fetchone()[0]
             last_diary = c.execute("SELECT created_at FROM diaries ORDER BY created_at DESC LIMIT 1").fetchone()
             if diary_count >= 1:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             if last_diary and log_ts - last_diary["created_at"] < 28800:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             c.execute("INSERT INTO diaries(content, created_at) VALUES(?,?)", (content[:200], log_ts))
             c.commit()
         elif action == "whisper" and content:
             w_count = c.execute("SELECT COUNT(*) FROM whispers WHERE initiator='ai' AND created_at>=?", (today_start,)).fetchone()[0]
             last_w = c.execute("SELECT created_at FROM whispers WHERE initiator='ai' ORDER BY created_at DESC LIMIT 1").fetchone()
             if w_count >= 3:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             if last_w and log_ts - last_w["created_at"] < 10800:
-                c.close(); return
+                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+                c.commit(); c.close(); return
             c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", log_ts))
             c.commit()
             await send_push_notification(title="Cyrus", body="你有一张新纸条", url="/")
