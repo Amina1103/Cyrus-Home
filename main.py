@@ -569,6 +569,7 @@ def build_reading_blocks(book_id):
     bp2_parts = []
     if ctx.get('profile'): bp2_parts.append(f"关于 Amina：\n{ctx['profile']}")
     bp2_parts.append(READING_SYSTEM_PROMPT)
+    if ctx.get('chat_context'): bp2_parts.append(f"你们刚才在聊天里的对话：\n{ctx['chat_context']}")
     if ctx.get('memory'): bp2_parts.append(f"你们关于这本书的相关记忆：\n{ctx['memory']}")
     blocks.append({"type": "text", "text": "\n\n".join(bp2_parts), "cache_control": {"type": "ephemeral"}})
     return blocks
@@ -1137,6 +1138,25 @@ def get_recent_chat_context(rounds=10):
     for r in reversed(rows):
         text = (r["content"] or "").strip()
         if len(text) > 80: text = text[:80] + "..."
+        prefix = "A" if r["role"] == "user" else "C"
+        lines.append(f"{prefix}: {text}")
+    return "\n".join(lines)
+
+def get_recent_chat_context_full(rounds=5):
+    c = get_db()
+    s = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
+    if not s:
+        c.close(); return ""
+    rows = c.execute(
+        "SELECT role, content, created_at FROM messages WHERE session_id=? ORDER BY created_at DESC LIMIT ?",
+        (s["id"], rounds * 2)
+    ).fetchall()
+    c.close()
+    if not rows: return ""
+    lines = []
+    for r in reversed(rows):
+        text = (r["content"] or "").strip()
+        if not text: continue
         prefix = "A" if r["role"] == "user" else "C"
         lines.append(f"{prefix}: {text}")
     return "\n".join(lines)
@@ -1732,7 +1752,8 @@ async def init_reading(req:ReadingInitRequest):
     t=b["title"] if b else ""; profile=db_get_profile(); memory=""
     try: memory=await call_ombre("breath",{"query":t})
     except Exception as e: print(f"⚠ reading init breath 失败: {e}")
-    reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t}
+    chat_ctx = get_recent_chat_context_full(rounds=5)
+    reading_contexts[req.book_id]={"memory":memory,"profile":profile,"title":t,"chat_context":chat_ctx}
     reading_conversations[req.book_id]=[]
     return {"ok":True,"has_memory":bool(memory)}
 
