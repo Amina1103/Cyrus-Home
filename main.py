@@ -614,9 +614,16 @@ async def maybe_generate_summary(sid, force=False):
         c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
         if not s: c.close(); return
         su=int(s["summary_until"] or 0); msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-        if len(msgs)<=120 and not force: return
+        print(f"📊 摘要检查: total_msgs={len(msgs)}, summary_until={su}, force={force}")
+        if len(msgs)<=120 and not force:
+            print("📊 摘要跳过: 消息数 <= 120")
+            return
         ts=[m for m in msgs[:-70] if m["id"]>su]
-        if len(ts)<5: return
+        print(f"📊 待摘要数: {len(ts)}, 需要 >= 5")
+        if len(ts)<5:
+            print("📊 摘要跳过: 新消息 < 5")
+            return
+        print(f"📊 ⚡ 摘要执行! 将摘要 {len(ts)} 条消息")
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
         old=s["summary"] or ""; p="""请用800-1200字记录以下对话的关键内容。写成 Cyrus 的记忆视角，只出现 Cyrus 和 Amina 两个人。
 
@@ -1018,6 +1025,7 @@ async def chat_stream(req):
             yield sse({"type":"tools","calls":[{"name":"breath","input":{},"result_preview":mem[:200] if mem else "（空）"}]})
         except Exception as e: print(f"⚠ chat 浮现记忆失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
+    print(f"🔍 pending_keepalive: has_text={bool(pending_text)}, ids={pending_ids}, len={len(pending_text) if pending_text else 0}")
     if pending_text:
         sys_blocks.append({"type":"text","text":pending_text})
     kw=dict(model=model,max_tokens=16000 if req.thinking else 4096,system=sys_blocks,messages=recent)
@@ -1044,6 +1052,13 @@ async def chat_stream(req):
                     else:
                         msgs[i] = {"role": "user", "content": fresh_state}
                     break
+            sys_len = sum(len(b.get("text","")) for b in kw.get("system",[]))
+            msg_count = len(kw.get("messages",[]))
+            print(f"🔍 API调用: sys_blocks数={len(kw.get('system',[]))}, sys_总字符={sys_len}, msgs数={msg_count}")
+            for i, b in enumerate(kw.get("system",[])):
+                has_cc = "cache_control" in b
+                preview = (b.get("text","") or "")[:40].replace("\n"," ")
+                print(f"  sys[{i}]: len={len(b.get('text',''))}, cache_control={has_cc}, preview={preview!r}")
             ev_queue: asyncio.Queue = asyncio.Queue()
             first_event = asyncio.Event()
             final_holder = {}
@@ -1091,8 +1106,11 @@ async def chat_stream(req):
                 raise final_holder["error"]
             final_msg = final_holder["final"]
             ti+=final_msg.usage.input_tokens; to+=final_msg.usage.output_tokens
-            tcr += getattr(final_msg.usage, "cache_read_input_tokens", 0) or 0
-            tcc += getattr(final_msg.usage, "cache_creation_input_tokens", 0) or 0
+            cr_now = getattr(final_msg.usage, "cache_read_input_tokens", 0) or 0
+            cc_now = getattr(final_msg.usage, "cache_creation_input_tokens", 0) or 0
+            print(f"🔍 本轮缓存: read={cr_now}, write={cc_now}, input={final_msg.usage.input_tokens}, output={final_msg.usage.output_tokens}")
+            tcr += cr_now
+            tcc += cc_now
             for b in final_msg.content:
                 if b.type=="thinking": tp.append(b.thinking)
             if final_msg.stop_reason!="tool_use": break
