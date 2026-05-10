@@ -610,22 +610,29 @@ def get_epub_title(fp):
 
 # ══ Summary ══
 async def maybe_generate_summary(sid, force=False):
+    if not force:
+        return  # 不再自动触发，只允许手动压缩
     try:
-        c=get_db(); s=c.execute("SELECT summary,summary_until FROM sessions WHERE id=?",(sid,)).fetchone()
-        if not s: c.close(); return
-        su=int(s["summary_until"] or 0); msgs=c.execute("SELECT id,role,content FROM messages WHERE session_id=? ORDER BY created_at ASC",(sid,)).fetchall(); c.close()
-        print(f"📊 摘要检查: total_msgs={len(msgs)}, summary_until={su}, force={force}")
-        if len(msgs)<=120 and not force:
-            print("📊 摘要跳过: 消息数 <= 120")
+        c = get_db()
+        s = c.execute("SELECT summary, summary_until FROM sessions WHERE id=?", (sid,)).fetchone()
+        if not s:
+            c.close(); return
+        su = int(s["summary_until"] or 0)
+        msgs = c.execute("SELECT id, role, content FROM messages WHERE session_id=? ORDER BY created_at ASC", (sid,)).fetchall()
+        c.close()
+        print(f"📊 手动摘要: total_msgs={len(msgs)}, summary_until={su}")
+        if len(msgs) <= 50:
+            print("📊 摘要跳过: 消息数 <= 50，不够压")
             return
-        ts=[m for m in msgs[:-70] if m["id"]>su]
-        print(f"📊 待摘要数: {len(ts)}, 需要 >= 5")
-        if len(ts)<5:
-            print("📊 摘要跳过: 新消息 < 5")
+        ts = [m for m in msgs[:-50] if m["id"] > su]
+        if not ts:
+            print("📊 摘要跳过: 没有新内容需要压缩")
             return
-        print(f"📊 ⚡ 摘要执行! 将摘要 {len(ts)} 条消息")
-        lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
-        old=s["summary"] or ""; p="""请用800-1200字记录以下对话的关键内容。写成 Cyrus 的记忆视角，只出现 Cyrus 和 Amina 两个人。
+        print(f"📊 ⚡ 摘要执行! 将压缩 {len(ts)} 条消息，保留最近 50 条原文")
+        lid = ts[-1]["id"]
+        mt = "\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
+        old = s["summary"] or ""
+        p = """请用800-1200字记录以下对话的关键内容。写成 Cyrus 的记忆视角，只出现 Cyrus 和 Amina 两个人。
 
 保留优先级（从高到低）：
 
@@ -642,10 +649,14 @@ async def maybe_generate_summary(sid, force=False):
 不重要的闲聊、重复的话题、水话可以跳过。
 
 """
-        p+=(f"之前的总结：{old}\n\n新增对话：\n{mt}" if old else mt)
-        r=client.messages.create(model="claude-sonnet-4-6",max_tokens=2000,messages=[{"role":"user","content":p}])
-        c=get_db(); c.execute("UPDATE sessions SET summary=?,summary_until=? WHERE id=?",(r.content[0].text,lid,sid)); c.commit(); c.close()
-    except Exception as e: print(f"⚠ 摘要失败: {e}")
+        p += (f"之前的总结：{old}\n\n新增对话：\n{mt}" if old else mt)
+        r = client.messages.create(model="claude-sonnet-4-6", max_tokens=2000, messages=[{"role": "user", "content": p}])
+        c = get_db()
+        c.execute("UPDATE sessions SET summary=?, summary_until=? WHERE id=?", (r.content[0].text, lid, sid))
+        c.commit(); c.close()
+        print(f"✅ 手动摘要完成: session={sid}, 压缩了 {len(ts)} 条消息, summary_until={lid}")
+    except Exception as e:
+        print(f"⚠ 摘要失败: {e}")
 
 # ══ Ombre Brain ══
 async def fetch_ombre_tools():
@@ -738,7 +749,7 @@ async def lifespan(app):
             print(f"✓ VAPID 密钥已生成（公钥前20: {pub_b64u[:20]}）")
         c.close()
     except Exception as e: print(f"⚠ VAPID 初始化失败: {e}")
-    scheduler.add_job(heartbeat_sync, 'interval', minutes=5, id='heartbeat', max_instances=1)
+    scheduler.add_job(heartbeat_sync, 'interval', minutes=3, id='heartbeat', max_instances=1)
     scheduler.start()
     print("Heartbeat scheduler started")
     yield
@@ -1158,7 +1169,6 @@ async def chat_stream(req):
         if not saved and accumulated and not error_occurred:
             try: db_add_message(req.session_id,"assistant",accumulated+"\n\n[已停止]")
             except Exception as e: print(f"⚠ 保存停止消息失败: {e}")
-    asyncio.create_task(maybe_generate_summary(req.session_id))
 
 # ══ Whispers (悄悄话) ══
 class WhisperCreate(BaseModel):
@@ -1426,9 +1436,6 @@ async def unified_heartbeat():
         last_user_ts = last_user_row["created_at"] if last_user_row else None
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         idle = now_ts - reference_ts
-        if idle < 2700:
-            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，不足 45 分钟")
-            c.close(); return
         # ── Phase 1: Keepalive（idle >= 55 分钟才触发）──
         if idle >= 3300:
             last_log = c.execute("SELECT created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 1").fetchone()
@@ -1442,11 +1449,14 @@ async def unified_heartbeat():
             else:
                 reason = "开关已关闭" if not toggle_on else f"距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟"
                 print(f"Heartbeat: 跳过 keepalive（{reason}）")
-        # ── Phase 2: Cache warmup（仅 3 小时内，超过不划算）──
-        if idle <= 10800:
+        # ── Phase 2: Cache warmup（idle 在 1 分钟到 3 小时之间才划算）──
+        if 60 <= idle <= 10800:
             cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
             c.close()
             await _do_warmup(cfg_row)
+        elif idle < 60:
+            c.close()
+            print(f"Heartbeat: 距上次聊天 {idle:.0f} 秒，刚聊完，跳过 warmup")
         else:
             c.close()
             print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 3 小时，跳过 warmup")
