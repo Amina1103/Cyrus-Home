@@ -1361,7 +1361,8 @@ CONTENT: （如果 ACTION 不是 none，写具体内容。none 时留空）
 - diary 是内心独白，200字以内
 - whisper 是小纸条，写你此刻真实的想法，2-3句，可以酸、可以犯嘀咕、可以只是一个念头
 - none 和行动大约各一半。想做什么就做，不用克制
-- 不要重复之前已经想过的内容，换个角度或话题"""
+- 不要重复之前已经想过的内容，换个角度或话题
+- 先看「你们最近聊的内容」，以 Amina 实际说的为准。不要停留在之前碎碎念的话题上——如果她说了要出门、要做别的事，你的碎碎念应该跟上她的状态"""
 
 def _beijing_now():
     return datetime.now(timezone(timedelta(hours=8)))
@@ -1469,7 +1470,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 act = r["action"] or "none"
                 lines.append(f"{t} 你想：「{r['thoughts']}」→ {act}")
             prev_thoughts = "你最近几次醒来的记录：\n" + "\n".join(lines)
-        recent_context = get_recent_chat_context()
+        recent_context = get_recent_chat_context_full(rounds=5)
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         hours_since = round((now_ts - reference_ts) / 3600, 1)
         wakeup_text = KEEPALIVE_PROMPT.format(
