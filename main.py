@@ -1129,8 +1129,7 @@ async def chat_stream(req):
         if not saved and accumulated and not error_occurred:
             try: db_add_message(req.session_id,"assistant",accumulated+"\n\n[已停止]")
             except Exception as e: print(f"⚠ 保存停止消息失败: {e}")
-    try: await maybe_generate_summary(req.session_id)
-    except Exception as e: print(f"⚠ 触发摘要失败: {e}")
+    asyncio.create_task(maybe_generate_summary(req.session_id))
 
 # ══ Whispers (悄悄话) ══
 class WhisperCreate(BaseModel):
