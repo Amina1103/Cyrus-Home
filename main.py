@@ -1531,6 +1531,12 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         if free_mode:
             tools = [t for t in LOCAL_TOOLS if t["name"] in ("web_search","web_fetch")]
             if tools: kw["tools"] = tools
+        # ── 诊断日志 ──
+        print(f"🔍 Keepalive API: sys_blocks={len(sys_blocks)}, model={keepalive_model}")
+        for i, b in enumerate(sys_blocks):
+            text = b.get("text", "")
+            print(f"  sys[{i}]: chars={len(text)}, preview='{text[:60]}'")
+        print(f"  messages={kw['messages']}")
         resp = client.messages.create(**kw)
         text = ""
         for block in resp.content:
