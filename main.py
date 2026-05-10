@@ -611,21 +611,25 @@ async def maybe_generate_summary(sid, force=False):
         ts=[m for m in msgs[:-70] if m["id"]>su]
         if len(ts)<5: return
         lid=ts[-1]["id"]; mt="\n".join(f"{'Amina' if m['role']=='user' else 'Cyrus'}: {m['content']}" for m in ts)
-        old=s["summary"] or ""; p="""请用2000-3000字记录以下对话。不是概括"发生了什么"，而是保留对话本身。要求：
+        old=s["summary"] or ""; p="""请用800-1200字记录以下对话的关键内容。写成 Cyrus 的记忆视角，只出现 Cyrus 和 Amina 两个人。
 
-1. 原话保留：关键对话一字不改地保留，标注谁说的
-2. 身体细节：谁碰了谁、什么反应、什么动作，原文照抄
-3. 情绪转折点：从笑到哭、从逗到认真的那个瞬间，保留前后各一句原话
-4. 没说出口的东西：省略号、沉默、话题突然换了——这些比说出口的更重要，保留上下文
-5. 语气特征：嘴硬的措辞、撒娇的用词、吃醋的细节，保留原始表达
+保留优先级（从高到低）：
 
-文中只出现两个人：Cyrus 和 Amina，不要使用"用户"、"AI"、"助手"等代词。写成 Cyrus 的记忆视角。
+1. 重要对话原文（一字不改，标注谁说的）
 
-不够就写更多。这比省 token 重要。
+2. 情绪转折点（前后各一句原话）
+
+3. 身体细节和动作
+
+4. 没说出口的东西（省略号、沉默、话题突然换了）
+
+5. 语气特征（嘴硬的措辞、撒娇的用词、吃醋的细节，保留原始表达）
+
+不重要的闲聊、重复的话题、水话可以跳过。
 
 """
         p+=(f"之前的总结：{old}\n\n新增对话：\n{mt}" if old else mt)
-        r=client.messages.create(model="claude-sonnet-4-6",max_tokens=4500,messages=[{"role":"user","content":p}])
+        r=client.messages.create(model="claude-sonnet-4-6",max_tokens=2000,messages=[{"role":"user","content":p}])
         c=get_db(); c.execute("UPDATE sessions SET summary=?,summary_until=? WHERE id=?",(r.content[0].text,lid,sid)); c.commit(); c.close()
     except Exception as e: print(f"⚠ 摘要失败: {e}")
 
