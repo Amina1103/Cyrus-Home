@@ -466,11 +466,18 @@ def db_get_messages_since_summary(sid, max_messages=200):
     s = c.execute("SELECT summary_until FROM sessions WHERE id=?", (sid,)).fetchone()
     until = (s["summary_until"] if s and s["summary_until"] else 0)
     rows = c.execute(
-        "SELECT role, content FROM messages WHERE session_id=? AND id > ? ORDER BY created_at ASC LIMIT ?",
+        "SELECT role, content, created_at FROM messages WHERE session_id=? AND id > ? ORDER BY created_at ASC LIMIT ?",
         (sid, until, max_messages)
     ).fetchall()
     c.close()
-    result = [{"role": r["role"], "content": r["content"]} for r in rows]
+    _bj = timezone(timedelta(hours=8))
+    result = []
+    for r in rows:
+        content = r["content"]
+        if r["role"] in ("user", "assistant"):
+            ts = datetime.fromtimestamp(r["created_at"], tz=_bj).strftime("%H:%M")
+            content = f"[{ts}] {r['content']}" if isinstance(r["content"], str) else r["content"]
+        result.append({"role": r["role"], "content": content})
     if len(result) > 40:
         for msg in result[:-40]:
             content = msg.get("content", "")
