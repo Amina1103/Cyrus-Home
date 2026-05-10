@@ -920,22 +920,6 @@ async def get_session(sid:str): return {"messages":db_get_messages(sid)}
 async def export_session(sid:str):
     return JSONResponse(content={"session_id":sid,"exported_at":time.time(),"messages":db_get_messages(sid)},headers={"Content-Disposition":f"attachment; filename=cyrus-chat-{sid}.json"})
 
-@app.get("/api/debug/keepalive")
-async def debug_keepalive():
-    """临时调试接口：手动触发一次 keepalive 碎碎念。查完删掉。"""
-    try:
-        now_bj = _beijing_now()
-        now_ts = time.time()
-        c = get_db()
-        last_user_row = c.execute("SELECT created_at FROM messages WHERE role='user' ORDER BY created_at DESC LIMIT 1").fetchone()
-        c.close()
-        last_user_ts = last_user_row["created_at"] if last_user_row else None
-        await _do_keepalive(now_bj, now_ts, last_user_ts)
-        return {"ok": True}
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return {"ok": False, "error": str(e)}
-
 @app.post("/api/sessions/{sid}/summarize")
 async def manual_summarize(sid: str):
     try:
