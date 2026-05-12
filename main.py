@@ -370,6 +370,8 @@ def init_db():
     for col, default in [("summary","''"),("summary_until","0")]:
         try: conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT {default}")
         except sqlite3.OperationalError: pass  # 列已存在
+    try: conn.execute("ALTER TABLE sessions ADD COLUMN title TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN source TEXT DEFAULT NULL")
     except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN keepalive_consumed INTEGER DEFAULT 0")
@@ -397,10 +399,15 @@ def db_get_profile():
 def db_set_profile(t):
     c=get_db(); c.execute("INSERT INTO settings(key,value) VALUES('profile',?) ON CONFLICT(key) DO UPDATE SET value=?",(t,t)); c.commit(); c.close()
 def db_list_sessions():
-    c=get_db(); rows=c.execute("SELECT id,last_active FROM sessions ORDER BY last_active DESC").fetchall(); result=[]
+    c=get_db(); rows=c.execute("SELECT id,last_active,title FROM sessions ORDER BY last_active DESC").fetchall(); result=[]
     for r in rows:
-        m=c.execute("SELECT content FROM messages WHERE session_id=? AND role='user' ORDER BY created_at ASC LIMIT 1",(r["id"],)).fetchone()
-        result.append({"id":r["id"],"preview":m["content"][:30] if m else "新对话"})
+        title = r["title"] if "title" in r.keys() else ""
+        if title:
+            preview = title
+        else:
+            m=c.execute("SELECT content FROM messages WHERE session_id=? AND role='user' ORDER BY created_at ASC LIMIT 1",(r["id"],)).fetchone()
+            preview = m["content"][:30] if m else "新对话"
+        result.append({"id":r["id"],"preview":preview})
     c.close(); return result
 def db_create_session():
     s=uuid.uuid4().hex[:8]; c=get_db(); c.execute("INSERT INTO sessions(id,last_active) VALUES(?,?)",(s,time.time())); c.commit(); c.close(); return s
@@ -912,6 +919,11 @@ async def list_sessions(): return {"sessions":db_list_sessions()}
 async def create_session(): return {"session_id":db_create_session()}
 @app.delete("/api/sessions/{sid}")
 async def delete_session(sid:str): db_delete_session(sid); return {"ok":True}
+@app.put("/api/sessions/{sid}/title")
+async def rename_session(sid:str, req:dict):
+    title = (req.get("title") or "").strip()[:60]
+    c=get_db(); c.execute("UPDATE sessions SET title=? WHERE id=?",(title,sid)); c.commit(); c.close()
+    return {"ok":True}
 @app.delete("/api/sessions/{sid}/messages_after")
 async def delete_messages_after(sid:str, created_at:float):
     c=get_db(); c.execute("DELETE FROM messages WHERE session_id=? AND created_at>=?",(sid,created_at)); c.commit(); c.close()
@@ -1680,7 +1692,9 @@ async def send_push_notification(title, body, url="/", force=False):
         last = c.execute("SELECT value FROM settings WHERE key='last_push_time'").fetchone()
         if last:
             try:
-                if time.time() - float(last["value"]) < 7200:
+                delta = time.time() - float(last["value"])
+                if delta < 300:
+                    print(f"⚠ push 冷却中，距上次 {delta/60:.1f} 分钟")
                     c.close(); return
             except (ValueError, TypeError) as e:
                 print(f"⚠ 解析 last_push_time 失败: {e}")
