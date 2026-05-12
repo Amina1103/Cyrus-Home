@@ -1705,7 +1705,13 @@ async def send_push_notification(title, body, url="/", force=False):
     print(f"DEBUG VAPID priv[:30]={VAPID_PRIVATE_KEY[:30]!r} pub={VAPID_PUBLIC_KEY}")
     sent = False
     def _push(sub_info):
-        return webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_SUB})
+        import os
+        proxy_keys = ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy')
+        saved = {k: os.environ.pop(k) for k in proxy_keys if k in os.environ}
+        try:
+            return webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_SUB})
+        finally:
+            os.environ.update(saved)
     for sub in subs:
         try: keys = json.loads(sub["keys_json"])
         except (json.JSONDecodeError, TypeError) as e:
