@@ -1133,7 +1133,12 @@ async def chat_stream(req):
                 if b.type=="tool_use":
                     nm={"web_search":"搜索","web_fetch":"抓取网页","github_read":"读取代码","breath":"查记忆","dream":"联想","hold":"存记忆","grow":"导入","trace":"修改"}
                     yield sse({"type":"status","text":f"正在{nm.get(b.name,b.name)}..."})
-                    try: rt=await execute_tool(b.name,b.input)
+                    tool_task = asyncio.create_task(execute_tool(b.name, b.input))
+                    while not tool_task.done():
+                        done, _ = await asyncio.wait({tool_task}, timeout=15)
+                        if not done:
+                            yield ": keepalive\n\n"
+                    try: rt = tool_task.result()
                     except Exception as e: rt=f"失败: {e}"
                     tc.append({"name":b.name,"input":b.input,"result_preview":rt[:200]})
                     if b.name in ("breath","hold","grow","trace","dream"):
