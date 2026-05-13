@@ -1930,7 +1930,7 @@ async def reading_comment(req:CommentRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":f"[当前页内容]\n{req.page_text[:1000]}"})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=120,system=build_reading_blocks(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.page_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
@@ -1946,7 +1946,7 @@ async def reading_highlight(req:HighlightRequest):
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":msg})
     recent=conv[-20:]
-    resp=client.messages.create(model=model,max_tokens=150,system=build_reading_blocks(req.book_id),messages=recent)
+    resp=client.messages.create(model=model,max_tokens=300,system=build_reading_blocks(req.book_id),messages=recent)
     cm=resp.content[0].text; conv.append({"role":"assistant","content":cm})
     c=get_db(); c.execute("INSERT INTO reading_comments(book_id,page_text,comment,created_at) VALUES(?,?,?,?)",(req.book_id,req.selected_text[:200],cm,time.time())); c.commit(); c.close()
     return {"comment":cm,"tokens":{"input":resp.usage.input_tokens,"output":resp.usage.output_tokens,"cache_read":getattr(resp.usage,'cache_read_input_tokens',0),"cache_write":getattr(resp.usage,'cache_creation_input_tokens',0),"model":model}}
