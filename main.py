@@ -1544,7 +1544,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         sys_blocks.append({"type":"text","text":wakeup_text})
         kw = dict(
             model=keepalive_model,
-            max_tokens=800 if free_mode else 200,
+            max_tokens=800 if free_mode else 500,
             system=sys_blocks,
             messages=[{"role":"user","content":"醒来"}],
         )
@@ -1595,7 +1595,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             if last_diary and log_ts - last_diary["created_at"] < 28800:
                 c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
                 c.commit(); c.close(); return
-            c.execute("INSERT INTO diaries(content, created_at) VALUES(?,?)", (content[:200], log_ts))
+            c.execute("INSERT INTO diaries(content, created_at) VALUES(?,?)", (content[:500], log_ts))
             c.commit()
         elif action == "whisper" and content:
             c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", log_ts))
