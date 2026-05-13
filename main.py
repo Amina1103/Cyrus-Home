@@ -305,6 +305,7 @@ pinned_memories = ""
 reading_contexts = {}
 reading_conversations = {}
 reading_active = False
+reading_last_model = "claude-sonnet-4-6"
 last_chat_time = time.time()
 scheduler = AsyncIOScheduler()
 VAPID_PUBLIC_KEY = ""
@@ -1673,7 +1674,7 @@ async def _do_reading_warmup():
         recent = conv[-20:] if conv else []
         recent_copy = list(recent) + [{"role": "user", "content": "ping"}]
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=reading_last_model,
             max_tokens=1,
             system=sys_blocks,
             messages=recent_copy,
@@ -1682,7 +1683,7 @@ async def _do_reading_warmup():
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
         status = "HIT" if cr > 0 else "MISS"
-        print(f"Heartbeat → Reading Warmup [{status}] book={active_book} read={cr} creation={cc}")
+        print(f"Heartbeat → Reading Warmup [{status}] book={active_book} model={reading_last_model} read={cr} creation={cc}")
     except Exception as e:
         print(f"Heartbeat → Reading Warmup error: {e}")
 
@@ -1924,6 +1925,7 @@ async def init_reading(req:ReadingInitRequest):
 async def reading_comment(req:CommentRequest):
     c=get_db(); b=c.execute("SELECT title FROM books WHERE id=?",(req.book_id,)).fetchone(); c.close()
     t=b["title"] if b else "书"; allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
+    global reading_last_model; reading_last_model = model
     if req.book_id not in reading_conversations: reading_conversations[req.book_id]=[]
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":f"[当前页内容]\n{req.page_text[:1000]}"})
@@ -1939,6 +1941,7 @@ async def reading_highlight(req:HighlightRequest):
     t=b["title"] if b else "书"; msg=f"选中了这段：\n\n「{req.selected_text}」"
     if req.user_message: msg+=f"\n\n我的想法：{req.user_message}"
     allowed={"claude-sonnet-4-6","claude-opus-4-6"}; model=req.model if req.model in allowed else "claude-sonnet-4-6"
+    global reading_last_model; reading_last_model = model
     if req.book_id not in reading_conversations: reading_conversations[req.book_id]=[]
     conv=reading_conversations[req.book_id]
     conv.append({"role":"user","content":msg})
