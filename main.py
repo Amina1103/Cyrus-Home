@@ -1447,7 +1447,7 @@ async def unified_heartbeat():
             print(f"Heartbeat: 不在活跃时段, 当前北京时间 {hour}:00")
             return
         if reading_active:
-            print("Heartbeat: 正在阅读，跳过")
+            await _do_reading_warmup()
             return
         now_ts = time.time()
         c = get_db()
@@ -1657,6 +1657,34 @@ async def _do_warmup(cfg_row):
         import traceback
         print(f"Heartbeat → Warmup error: {e}")
         traceback.print_exc()
+
+async def _do_reading_warmup():
+    """阅读器缓存保活"""
+    try:
+        active_book = None
+        for book_id in reading_contexts:
+            active_book = book_id
+            break
+        if not active_book:
+            print("Heartbeat → Reading Warmup: no active book, skip")
+            return
+        sys_blocks = build_reading_blocks(active_book)
+        conv = reading_conversations.get(active_book, [])
+        recent = conv[-20:] if conv else []
+        recent_copy = list(recent) + [{"role": "user", "content": "ping"}]
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1,
+            system=sys_blocks,
+            messages=recent_copy,
+        )
+        u = resp.usage
+        cr = getattr(u, "cache_read_input_tokens", 0) or 0
+        cc = getattr(u, "cache_creation_input_tokens", 0) or 0
+        status = "HIT" if cr > 0 else "MISS"
+        print(f"Heartbeat → Reading Warmup [{status}] book={active_book} read={cr} creation={cc}")
+    except Exception as e:
+        print(f"Heartbeat → Reading Warmup error: {e}")
 
 @app.get("/api/keepalive/toggle")
 async def get_keepalive_toggle():
