@@ -1919,6 +1919,10 @@ async def init_reading(req:ReadingInitRequest):
     reading_conversations[req.book_id]=[]
     global reading_active
     reading_active = True
+    c2 = get_db()
+    c2.execute("INSERT INTO events(type, value, action, created_at) VALUES(?,?,?,?)",
+        ("reading", t or req.book_id, "open", time.time()))
+    c2.commit(); c2.close()
     return {"ok":True,"has_memory":bool(memory)}
 
 @app.post("/api/reading/comment")
@@ -2040,6 +2044,12 @@ async def delete_favorite(fid: int):
 async def close_reading(req:ReadingInitRequest):
     global reading_active
     reading_active = False
+    c = get_db()
+    b = c.execute("SELECT title FROM books WHERE id=?", (req.book_id,)).fetchone()
+    t = b["title"] if b else req.book_id
+    c.execute("INSERT INTO events(type, value, action, created_at) VALUES(?,?,?,?)",
+        ("reading", t, "close", time.time()))
+    c.commit(); c.close()
     reading_conversations.pop(req.book_id,None); reading_contexts.pop(req.book_id,None); return {"ok":True}
 
 @app.get("/api/reading/comments/{bid}")
