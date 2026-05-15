@@ -765,7 +765,11 @@ async def execute_tool(name,args):
     if name=="web_search": return await do_web_search(args.get("query",""))
     elif name=="web_fetch": return await do_web_fetch(args.get("url",""))
     elif name=="github_read": return await do_github_read(args.get("owner",""),args.get("repo",""),args.get("path",""))
-    else: return await call_ombre(name,args)
+    else:
+        if name in ("hold","grow") and args.get("content"):
+            ts = datetime.now(timezone(timedelta(hours=8))).strftime("[%Y-%m-%d %H:%M]")
+            args = {**args, "content": f"{ts} {args['content']}"}
+        return await call_ombre(name,args)
 
 # ══ App ══
 def _generate_vapid_keys():
