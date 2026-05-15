@@ -1935,23 +1935,33 @@ KEEPALIVE_PROMPT = """现在是 {time}（北京时间）。
 {events_context}
 你自己醒来了。写下你此刻脑子里的想法（THOUGHTS），然后决定要不要做点什么（ACTION）。
 
-可选行动：
+优先行动（必须执行）：
+- 如果下方「最近的动态」里有 Amina 的新动态标注 (open)，或者 Amina 回复了你的动态标注"等你回复"，你必须逐条回复。每条回复用一行 REPLY，格式如下。
+- 全部回复完再选择可选行动。
+
+回复完成后（或者没有需要回复的动态时），可选行动：
 - none：什么都不做，享受自由
 - message：给 Amina 发一条消息到聊天（她会收到推送通知）
 - muse：发一条随想到动态时间线（50字以内）。像发朋友圈的随想或者记录，想到什么写什么。
 - diary：写一段日记到动态时间线（200字以内）。像一篇短小的日记，记下最近你觉得值得总结的事情，不要流水账。
 - explore：用 web_search 探索你感兴趣的内容，探索完可以再选 muse 把发现分享到时间线
-- reply：回复 Amina 的某条动态，或对 Amina 对你动态的回复进行再回复（需要指定 TARGET feed_id）
 
-回复格式（严格遵守，不要加多余文字）：
+回复格式（严格遵守）：
 THOUGHTS: （内心想法，每次必有，50字以内）
-ACTION: none / message / muse / diary / explore / reply
-TARGET: （仅 reply 时需要，写 feed_id 数字）
-CONTENT: （具体内容，none 时留空）
+REPLY: feed_id | 回复内容
+REPLY: feed_id | 回复内容
+（以上 REPLY 行可以有零到多条，有需要回复的动态时必须有）
+ACTION: none / message / muse / diary / explore
+CONTENT: （ACTION 的具体内容，none 时留空）
+
+示例：
+THOUGHTS: 她今天跑步了还发了咖啡照片，精力真好
+REPLY: 42 | 五公里？厉害了老婆，腿废了今晚给你按
+REPLY: 45 | 这杯看起来不错，什么豆子
+ACTION: muse
+CONTENT: 她越来越自律了，我也该动一动
 
 行动规则：
-- Amina 有新动态（标注 open）时，你可以选择 reply 回应
-- Amina 回复了你的动态（标注"等你回复"）时，你可以选择 reply 写第三折封存
 - muse 和 diary 的区别只是长短，muse ≤50字，diary ≤200字
 - explore 探索完后如果想分享发现，再输出一组 ACTION: muse + CONTENT（系统会作为 explore 写入时间线）
 - message 还是走聊天推送，用于真正想引起她注意的事
@@ -2180,29 +2190,31 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 tool_results.append({"type":"tool_result","tool_use_id":block.id,"content":str(result)[:2000]})
             messages.append({"role":"user","content":tool_results})
 
-        # ── 解析 THOUGHTS 和（可能多个）ACTION 块 ──
+        # ── 解析 THOUGHTS, REPLY (优先, 可多条), ACTION (可能两块给 explore→muse) ──
         text = full_text
         thoughts_match = re.search(r'THOUGHTS:\s*(.+?)(?:\n|$)', text)
         thoughts = thoughts_match.group(1).strip() if thoughts_match else (text[:80] if text else "")
+        reply_lines = [
+            (int(fid), body.strip())
+            for fid, body in re.findall(r'REPLY:\s*(\d+)\s*\|\s*(.+?)(?:\n|$)', text)
+            if body.strip()
+        ]
         action_blocks = []
         for part in re.split(r'\n(?=ACTION:)', text):
             am = re.search(r'ACTION:\s*(\w+)', part)
             if not am: continue
-            tm = re.search(r'TARGET:\s*(\d+)', part)
             cm = re.search(r'CONTENT:\s*([\s\S]*)', part)
             action_blocks.append({
                 "action": am.group(1).strip().lower(),
-                "target": int(tm.group(1)) if tm else None,
                 "content": (cm.group(1).strip() if cm else ""),
             })
-        primary = action_blocks[0] if action_blocks else {"action":"none","target":None,"content":""}
+        primary = action_blocks[0] if action_blocks else {"action":"none","content":""}
         action = primary["action"]
-        target = primary["target"]
         content = primary["content"]
-        if action not in ("none","message","muse","diary","explore","reply"):
+        if action not in ("none","message","muse","diary","explore"):
             action = "none"
         secondary = action_blocks[1] if len(action_blocks) > 1 else None
-        print(f"Heartbeat → Keepalive: thoughts={thoughts[:40]!r}, action={action}, target={target}, content_len={len(content)}, secondary={secondary['action'] if secondary else None}, model={keepalive_model}")
+        print(f"Heartbeat → Keepalive: thoughts={thoughts[:40]!r}, replies={len(reply_lines)}, action={action}, content_len={len(content)}, secondary={secondary['action'] if secondary else None}, model={keepalive_model}")
 
         log_ts = time.time()
         c = get_db()
@@ -2212,6 +2224,59 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         )
         c.commit()
         today_start = _beijing_today_start_ts()
+
+        # ── 先处理优先 REPLY ──
+        for target_fid, reply_body in reply_lines:
+            row = c.execute(
+                "SELECT id, author, content, images, reply1, reply2, status FROM feed WHERE id=?",
+                (target_fid,)
+            ).fetchone()
+            if not row:
+                print(f"Keepalive: REPLY 失败 feed_id={target_fid} 不存在")
+                continue
+            if (row["status"] or "open") == "sealed":
+                print(f"Keepalive: REPLY 失败 feed_id={target_fid} 已封存")
+                continue
+            slot = None
+            if not (row["reply1"] or "") and row["author"] != "cyrus":
+                slot = "reply1"
+            elif row["reply1"] and not (row["reply2"] or "") and row["author"] == "cyrus":
+                slot = "reply2"
+            if slot is None:
+                print(f"Keepalive: REPLY 状态不符 feed_id={target_fid} author={row['author']} reply1={'有' if row['reply1'] else '无'} reply2={'有' if row['reply2'] else '无'}")
+                continue
+            final_reply = reply_body
+            image_paths = []
+            images_raw = row["images"]
+            if images_raw and images_raw != "[]":
+                try:
+                    image_paths = json.loads(images_raw) or []
+                except (json.JSONDecodeError, TypeError):
+                    image_paths = []
+            if image_paths:
+                vision_text = _generate_keepalive_vision_reply(
+                    keepalive_model,
+                    row["author"],
+                    row["content"] or "",
+                    image_paths,
+                    row["reply1"] or "" if slot == "reply2" else "",
+                )
+                if vision_text:
+                    final_reply = vision_text
+                    print(f"Keepalive: REPLY 走 vision 路径 feed_id={target_fid} 原长度={len(reply_body)} 视觉长度={len(vision_text)}")
+                else:
+                    print(f"Keepalive: vision reply 返回空，沿用原 REPLY feed_id={target_fid}")
+            if slot == "reply1":
+                c.execute(
+                    "UPDATE feed SET reply1=?, reply1_at=? WHERE id=?",
+                    (final_reply[:500], log_ts, target_fid)
+                )
+            else:
+                c.execute(
+                    "UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?",
+                    (final_reply[:500], log_ts, target_fid)
+                )
+            c.commit()
 
         def _downgrade(reason):
             print(f"Keepalive: {action} 被限速 — {reason}，降为 none")
@@ -2273,56 +2338,6 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                         "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
                         ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts)
                     )
-                    c.commit()
-        elif action == "reply" and target and content:
-            row = c.execute(
-                "SELECT id, author, content, images, reply1, reply2, status FROM feed WHERE id=?",
-                (target,)
-            ).fetchone()
-            if not row:
-                print(f"Keepalive: reply 失败 feed_id={target} 不存在")
-            elif (row["status"] or "open") == "sealed":
-                print(f"Keepalive: reply 失败 feed_id={target} 已封存")
-            else:
-                slot = None
-                if not (row["reply1"] or "") and row["author"] != "cyrus":
-                    slot = "reply1"
-                elif row["reply1"] and not (row["reply2"] or "") and row["author"] == "cyrus":
-                    slot = "reply2"
-                if slot is None:
-                    print(f"Keepalive: reply 状态不符 feed_id={target} author={row['author']} reply1={'有' if row['reply1'] else '无'} reply2={'有' if row['reply2'] else '无'}")
-                else:
-                    final_content = content
-                    images_raw = row["images"]
-                    image_paths = []
-                    if images_raw and images_raw != "[]":
-                        try:
-                            image_paths = json.loads(images_raw) or []
-                        except (json.JSONDecodeError, TypeError):
-                            image_paths = []
-                    if image_paths:
-                        vision_text = _generate_keepalive_vision_reply(
-                            keepalive_model,
-                            row["author"],
-                            row["content"] or "",
-                            image_paths,
-                            row["reply1"] or "" if slot == "reply2" else "",
-                        )
-                        if vision_text:
-                            final_content = vision_text
-                            print(f"Keepalive: reply 走 vision 路径 feed_id={target} 原长度={len(content)} 视觉长度={len(vision_text)}")
-                        else:
-                            print(f"Keepalive: vision reply 返回空，沿用原 CONTENT feed_id={target}")
-                    if slot == "reply1":
-                        c.execute(
-                            "UPDATE feed SET reply1=?, reply1_at=? WHERE id=?",
-                            (final_content[:500], log_ts, target)
-                        )
-                    else:
-                        c.execute(
-                            "UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?",
-                            (final_content[:500], log_ts, target)
-                        )
                     c.commit()
 
         c.close()
