@@ -2032,6 +2032,57 @@ def heartbeat_sync():
     except Exception as e:
         print(f"Heartbeat sync error: {e}")
 
+def _generate_keepalive_vision_reply(keepalive_model, post_author, post_content, image_paths, prior_reply):
+    """When the feed post has images, re-call the model with the actual image
+    bytes (+ post text + optional Amina reply) so Cyrus's reply reflects what
+    he saw, not the placeholder CONTENT the keepalive turn returned."""
+    sys_blocks = build_keepalive_blocks()
+    poster = "Amina" if post_author == "amina" else ("Cyrus" if post_author == "cyrus" else post_author)
+    parts = []
+    if post_content:
+        parts.append({"type": "text", "text": f"{poster} 发的动态：\n{post_content}"})
+    loaded = 0
+    for p in (image_paths or [])[:6]:
+        if not p or not os.path.exists(p):
+            continue
+        try:
+            with open(p, "rb") as fh:
+                raw = fh.read()
+        except OSError as e:
+            print(f"⚠ vision reply 读取图片失败 {p}: {e}")
+            continue
+        ext = p.rsplit(".", 1)[-1].lower() if "." in p else "jpeg"
+        media_type = {
+            "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "png": "image/png", "gif": "image/gif", "webp": "image/webp",
+        }.get(ext, "image/jpeg")
+        parts.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type,
+                       "data": base64.b64encode(raw).decode()}
+        })
+        loaded += 1
+    if loaded == 0:
+        return ""
+    if prior_reply:
+        parts.append({"type": "text", "text": f"Amina 已经回复过：\n{prior_reply}"})
+    parts.append({"type": "text", "text": "你看到了这条动态的图片，请写一条回复。简短，1-3句。"})
+    try:
+        resp = client.messages.create(
+            model=keepalive_model,
+            max_tokens=200,
+            system=sys_blocks,
+            messages=[{"role": "user", "content": parts}],
+        )
+        out = ""
+        for b in resp.content:
+            if getattr(b, "type", None) == "text":
+                out += b.text
+        return out.strip()
+    except Exception as e:
+        print(f"⚠ vision reply 生成失败: {e}")
+        return ""
+
 async def _do_keepalive(now_bj, now_ts, last_user_ts):
     """原 keepalive_check 的核心逻辑，从 Phase 1 调用"""
     try:
@@ -2219,19 +2270,55 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                     )
                     c.commit()
         elif action == "reply" and target and content:
-            row = c.execute("SELECT id, author, reply1, reply2, status FROM feed WHERE id=?", (target,)).fetchone()
+            row = c.execute(
+                "SELECT id, author, content, images, reply1, reply2, status FROM feed WHERE id=?",
+                (target,)
+            ).fetchone()
             if not row:
                 print(f"Keepalive: reply 失败 feed_id={target} 不存在")
             elif (row["status"] or "open") == "sealed":
                 print(f"Keepalive: reply 失败 feed_id={target} 已封存")
-            elif not (row["reply1"] or "") and row["author"] != "cyrus":
-                c.execute("UPDATE feed SET reply1=?, reply1_at=? WHERE id=?", (content[:500], log_ts, target))
-                c.commit()
-            elif row["reply1"] and not (row["reply2"] or "") and row["author"] == "cyrus":
-                c.execute("UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?", (content[:500], log_ts, target))
-                c.commit()
             else:
-                print(f"Keepalive: reply 状态不符 feed_id={target} author={row['author']} reply1={'有' if row['reply1'] else '无'} reply2={'有' if row['reply2'] else '无'}")
+                slot = None
+                if not (row["reply1"] or "") and row["author"] != "cyrus":
+                    slot = "reply1"
+                elif row["reply1"] and not (row["reply2"] or "") and row["author"] == "cyrus":
+                    slot = "reply2"
+                if slot is None:
+                    print(f"Keepalive: reply 状态不符 feed_id={target} author={row['author']} reply1={'有' if row['reply1'] else '无'} reply2={'有' if row['reply2'] else '无'}")
+                else:
+                    final_content = content
+                    images_raw = row["images"]
+                    image_paths = []
+                    if images_raw and images_raw != "[]":
+                        try:
+                            image_paths = json.loads(images_raw) or []
+                        except (json.JSONDecodeError, TypeError):
+                            image_paths = []
+                    if image_paths:
+                        vision_text = _generate_keepalive_vision_reply(
+                            keepalive_model,
+                            row["author"],
+                            row["content"] or "",
+                            image_paths,
+                            row["reply1"] or "" if slot == "reply2" else "",
+                        )
+                        if vision_text:
+                            final_content = vision_text
+                            print(f"Keepalive: reply 走 vision 路径 feed_id={target} 原长度={len(content)} 视觉长度={len(vision_text)}")
+                        else:
+                            print(f"Keepalive: vision reply 返回空，沿用原 CONTENT feed_id={target}")
+                    if slot == "reply1":
+                        c.execute(
+                            "UPDATE feed SET reply1=?, reply1_at=? WHERE id=?",
+                            (final_content[:500], log_ts, target)
+                        )
+                    else:
+                        c.execute(
+                            "UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?",
+                            (final_content[:500], log_ts, target)
+                        )
+                    c.commit()
 
         c.close()
     except Exception as e:
