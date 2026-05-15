@@ -378,6 +378,26 @@ def init_db():
         CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL UNIQUE, keys_json TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS thinking_bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, message_content TEXT DEFAULT '', thinking_content TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS tool_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, tool_name TEXT NOT NULL, input_json TEXT DEFAULT '{}', created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS feed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author TEXT NOT NULL,
+            type TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            images TEXT DEFAULT NULL,
+            status_at_post TEXT DEFAULT '',
+            reply1 TEXT DEFAULT '',
+            reply1_at REAL DEFAULT 0,
+            reply2 TEXT DEFAULT '',
+            reply2_at REAL DEFAULT 0,
+            status TEXT DEFAULT 'open',
+            consumed INTEGER DEFAULT 0,
+            created_at REAL NOT NULL,
+            ended_at REAL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_feed_created ON feed(created_at);
+        CREATE INDEX IF NOT EXISTS idx_feed_type_created ON feed(type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_feed_consumed ON feed(consumed, created_at);
+        CREATE INDEX IF NOT EXISTS idx_feed_author_type ON feed(author, type, created_at);
     """)
     conn.executescript("""
         -- messages: 最频繁查询，按 session 取消息、按 role+时间找最近用户消息、按 id 增量取
@@ -437,6 +457,34 @@ def init_db():
     try: conn.execute("ALTER TABLE messages ADD COLUMN model TEXT DEFAULT NULL")
     except sqlite3.OperationalError: pass  # 列已存在
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
+
+def compress_image(input_path, output_path):
+    from PIL import Image, ImageOps
+    import shutil
+    ext = input_path.rsplit(".", 1)[-1].lower() if "." in input_path else ""
+    try:
+        size = os.path.getsize(input_path)
+    except OSError:
+        size = 0
+    if ext in ("jpg", "jpeg") and size > 0 and size < 300 * 1024:
+        try:
+            with Image.open(input_path) as probe:
+                w, h = probe.size
+            if max(w, h) <= 1200:
+                if os.path.abspath(input_path) != os.path.abspath(output_path):
+                    shutil.copyfile(input_path, output_path)
+                return
+        except Exception as e:
+            print(f"⚠ compress_image 探测失败，走压缩路径: {e}")
+    with Image.open(input_path) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        w, h = img.size
+        if max(w, h) > 1200:
+            ratio = 1200 / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        img.save(output_path, "JPEG", quality=80, optimize=True)
 
 def db_get_profile():
     c=get_db(); r=c.execute("SELECT value FROM settings WHERE key='profile'").fetchone(); c.close(); return r["value"] if r else ""
@@ -577,6 +625,73 @@ def get_recent_events(hours=6):
                 lines.append(f"{ts} 关了 {ev['value']}")
         else:
             lines.append(f"{ts} 打开了 {ev['value']}")
+    return "\n".join(lines)
+
+def get_recent_feed(hours=6):
+    cutoff = time.time() - hours * 3600
+    c = get_db()
+    rows = c.execute(
+        "SELECT id, author, type, content, images, status_at_post, reply1, reply1_at, reply2, reply2_at, status, created_at, ended_at "
+        "FROM feed WHERE created_at >= ? AND type != 'status' ORDER BY created_at ASC",
+        (cutoff,)
+    ).fetchall()
+    status_row = c.execute(
+        "SELECT content FROM feed WHERE type='status' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    c.close()
+    bj = timezone(timedelta(hours=8))
+    current_status = status_row["content"] if status_row else ""
+    def _fmt_ts(t): return datetime.fromtimestamp(t, tz=bj).strftime("%H:%M")
+    def _display_name(a):
+        if a == "amina": return "Amina"
+        if a == "cyrus": return "Cyrus"
+        if a == "system": return "系统"
+        return a
+    lines = []
+    if current_status:
+        lines.append(f"Amina 当前状态：{current_status}")
+    if rows:
+        if current_status: lines.append("")
+        lines.append("最近的动态：")
+        for r in rows:
+            ts = _fmt_ts(r["created_at"])
+            t = r["type"]
+            author = _display_name(r["author"])
+            if t == "app":
+                if r["ended_at"]:
+                    end_ts = _fmt_ts(r["ended_at"])
+                    dur = max(1, int((r["ended_at"] - r["created_at"]) / 60))
+                    lines.append(f"- {ts} - {end_ts} {r['content']}（{dur}分钟）")
+                else:
+                    lines.append(f"- {ts} 打开了 {r['content']}")
+            elif t == "moment":
+                status_tag = f"[{r['status_at_post']}] " if r["status_at_post"] else ""
+                images = []
+                try:
+                    if r["images"]: images = json.loads(r["images"])
+                except (json.JSONDecodeError, TypeError):
+                    images = []
+                img_tag = f" [附图{len(images)}张]" if images else ""
+                lines.append(
+                    f"- {ts} {author} {status_tag}发了动态：\"{r['content']}\"{img_tag} "
+                    f"(feed_id={r['id']}, {r['status']})"
+                )
+                if r["reply1"]:
+                    other = "Cyrus" if r["author"] == "amina" else "Amina"
+                    lines.append(f"  → {other} 回复了：\"{r['reply1']}\"")
+                if r["reply2"]:
+                    lines.append(f"  → {author} 再回复：\"{r['reply2']}\"")
+            elif t in ("thought", "diary", "explore"):
+                type_label = {"thought": "写了感想", "diary": "写了日记", "explore": "探索了"}[t]
+                lines.append(
+                    f"- {ts} {author} {type_label}：\"{r['content']}\" "
+                    f"(feed_id={r['id']}, {r['status']})"
+                )
+                if r["reply1"]:
+                    other = "Cyrus" if r["author"] == "amina" else "Amina"
+                    lines.append(f"  → {other} 回复了：\"{r['reply1']}\"")
+                if r["reply2"]:
+                    lines.append(f"  → {author} 再回复：\"{r['reply2']}\"")
     return "\n".join(lines)
 
 def build_base_block():
@@ -966,6 +1081,18 @@ async def report_event(type: str, value: str, action: str = "open"):
     if dup:
         c.close(); return {"ok": True, "deduped": True}
     c.execute("INSERT INTO events(type, value, action, created_at) VALUES(?,?,?,?)", (type, value, action, now))
+    if action == "close":
+        c.execute(
+            "UPDATE feed SET ended_at=? WHERE id = ("
+            "SELECT id FROM feed WHERE type='app' AND content=? AND ended_at=0 "
+            "ORDER BY created_at DESC LIMIT 1)",
+            (now, value)
+        )
+    else:
+        c.execute(
+            "INSERT INTO feed(author, type, content, status, created_at) VALUES(?,?,?,?,?)",
+            ("system", "app", value, "sealed", now)
+        )
     c.commit(); c.close()
     return {"ok": True}
 @app.get("/api/sessions")
@@ -1015,6 +1142,150 @@ async def get_image(filename: str):
     ext = filename.rsplit(".", 1)[-1].lower()
     media = {"jpg":"image/jpeg","jpeg":"image/jpeg","png":"image/png","gif":"image/gif","webp":"image/webp"}.get(ext, "application/octet-stream")
     return FileResponse(path, media_type=media)
+
+# ══ Feed ══
+class FeedCreate(BaseModel):
+    type: str
+    content: str = ""
+    images: list[str] = []
+
+class FeedReply(BaseModel):
+    content: str
+    author: str = "amina"
+
+class FeedStatusCreate(BaseModel):
+    content: str
+
+def _feed_row_to_dict(r):
+    images = []
+    if r["images"]:
+        try: images = json.loads(r["images"])
+        except (json.JSONDecodeError, TypeError): images = []
+    return {
+        "id": r["id"],
+        "author": r["author"],
+        "type": r["type"],
+        "content": r["content"] or "",
+        "images": images,
+        "status_at_post": r["status_at_post"] or "",
+        "reply1": r["reply1"] or "",
+        "reply1_at": r["reply1_at"] or 0,
+        "reply2": r["reply2"] or "",
+        "reply2_at": r["reply2_at"] or 0,
+        "status": r["status"] or "open",
+        "consumed": int(r["consumed"] or 0),
+        "created_at": r["created_at"],
+        "ended_at": r["ended_at"] or 0,
+    }
+
+@app.post("/api/feed/upload")
+async def feed_upload(file: UploadFile = File(...)):
+    img_id = uuid.uuid4().hex
+    src_name = file.filename or "image.jpg"
+    src_ext = src_name.rsplit(".", 1)[-1].lower() if "." in src_name else "jpg"
+    if src_ext not in ("jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "heic"):
+        src_ext = "jpg"
+    temp_path = f"data/images/{img_id}.orig.{src_ext}"
+    final_path = f"data/images/{img_id}.jpg"
+    content = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(content)
+    try:
+        await asyncio.to_thread(compress_image, temp_path, final_path)
+    except Exception as e:
+        try: os.remove(temp_path)
+        except OSError: pass
+        return JSONResponse({"ok": False, "error": str(e)}, 500)
+    try: os.remove(temp_path)
+    except OSError as e: print(f"⚠ 删除临时图片失败 {temp_path}: {e}")
+    return {"ok": True, "path": final_path}
+
+@app.get("/api/feed")
+async def feed_list(page: int = 1, limit: int = 20):
+    if page < 1: page = 1
+    if limit < 1 or limit > 100: limit = 20
+    offset = (page - 1) * limit
+    c = get_db()
+    rows = c.execute(
+        "SELECT * FROM feed WHERE type != 'status' ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (limit, offset)
+    ).fetchall()
+    c.close()
+    return {"items": [_feed_row_to_dict(r) for r in rows], "page": page, "limit": limit}
+
+@app.post("/api/feed")
+async def feed_create(req: FeedCreate):
+    now = time.time()
+    c = get_db()
+    status_row = c.execute(
+        "SELECT content FROM feed WHERE type='status' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    status_at_post = status_row["content"] if status_row else ""
+    images_json = json.dumps(req.images) if req.images else None
+    cur = c.execute(
+        "INSERT INTO feed(author, type, content, images, status_at_post, created_at) "
+        "VALUES(?,?,?,?,?,?)",
+        ("amina", req.type, req.content or "", images_json, status_at_post, now)
+    )
+    fid = cur.lastrowid
+    c.commit()
+    row = c.execute("SELECT * FROM feed WHERE id=?", (fid,)).fetchone()
+    c.close()
+    return _feed_row_to_dict(row)
+
+@app.post("/api/feed/{feed_id}/reply")
+async def feed_reply(feed_id: int, req: FeedReply):
+    now = time.time()
+    c = get_db()
+    row = c.execute("SELECT * FROM feed WHERE id=?", (feed_id,)).fetchone()
+    if not row:
+        c.close()
+        return JSONResponse({"error": "not found"}, 404)
+    if (row["status"] or "open") == "sealed":
+        c.close()
+        return JSONResponse({"error": "已封存，不可回复"}, 400)
+    if not (row["reply1"] or ""):
+        if req.author == row["author"]:
+            c.close()
+            return JSONResponse({"error": "只有对方可以回复"}, 400)
+        c.execute("UPDATE feed SET reply1=?, reply1_at=? WHERE id=?", (req.content, now, feed_id))
+    elif not (row["reply2"] or ""):
+        if req.author != row["author"]:
+            c.close()
+            return JSONResponse({"error": "只有原作者可以再次回复"}, 400)
+        c.execute(
+            "UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?",
+            (req.content, now, feed_id)
+        )
+    else:
+        c.close()
+        return JSONResponse({"error": "已经有两条回复"}, 400)
+    c.commit()
+    updated = c.execute("SELECT * FROM feed WHERE id=?", (feed_id,)).fetchone()
+    c.close()
+    return _feed_row_to_dict(updated)
+
+@app.get("/api/feed/status")
+async def feed_status_get():
+    c = get_db()
+    row = c.execute(
+        "SELECT content, created_at FROM feed WHERE type='status' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    c.close()
+    if not row:
+        return {"status": "", "since": 0}
+    return {"status": row["content"] or "", "since": row["created_at"]}
+
+@app.post("/api/feed/status")
+async def feed_status_set(req: FeedStatusCreate):
+    now = time.time()
+    c = get_db()
+    c.execute(
+        "INSERT INTO feed(author, type, content, status, created_at) VALUES(?,?,?,?,?)",
+        ("amina", "status", req.content or "", "sealed", now)
+    )
+    c.commit(); c.close()
+    return {"ok": True}
 
 # ══ Thinking bookmarks ══
 class ThinkingBookmarkRequest(BaseModel):
@@ -1590,7 +1861,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         memory = ""
         try: memory = await call_ombre("breath", {})
         except Exception as e: print(f"⚠ keepalive breath 失败: {e}")
-        events_str = get_recent_events()
+        events_str = get_recent_feed()
         events_context = f"感知到的动静：\n{events_str}" if events_str else ""
         c_kl = get_db()
         recent_logs = c_kl.execute(

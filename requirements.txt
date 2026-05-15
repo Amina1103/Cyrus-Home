@@ -10,3 +10,4 @@ apscheduler
 pywebpush
 cryptography
 socksio
+Pillow
