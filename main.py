@@ -681,8 +681,8 @@ def get_recent_feed(hours=6):
                     lines.append(f"  → {other} 回复了：\"{r['reply1']}\"")
                 if r["reply2"]:
                     lines.append(f"  → {author} 再回复：\"{r['reply2']}\"")
-            elif t in ("thought", "diary", "explore"):
-                type_label = {"thought": "写了感想", "diary": "写了日记", "explore": "探索了"}[t]
+            elif t in ("muse", "diary", "explore"):
+                type_label = {"muse": "随手写", "diary": "写了日记", "explore": "探索了"}[t]
                 lines.append(
                     f"- {ts} {author} {type_label}：\"{r['content']}\" "
                     f"(feed_id={r['id']}, {r['status']})"
@@ -1081,18 +1081,19 @@ async def report_event(type: str, value: str, action: str = "open"):
     if dup:
         c.close(); return {"ok": True, "deduped": True}
     c.execute("INSERT INTO events(type, value, action, created_at) VALUES(?,?,?,?)", (type, value, action, now))
-    if action == "close":
-        c.execute(
-            "UPDATE feed SET ended_at=? WHERE id = ("
-            "SELECT id FROM feed WHERE type='app' AND content=? AND ended_at=0 "
-            "ORDER BY created_at DESC LIMIT 1)",
-            (now, value)
-        )
-    else:
-        c.execute(
-            "INSERT INTO feed(author, type, content, status, created_at) VALUES(?,?,?,?,?)",
-            ("system", "app", value, "sealed", now)
-        )
+    if type.startswith("app."):
+        if action == "close":
+            c.execute(
+                "UPDATE feed SET ended_at=? WHERE id = ("
+                "SELECT id FROM feed WHERE type='app' AND content=? AND ended_at=0 "
+                "ORDER BY created_at DESC LIMIT 1)",
+                (now, value)
+            )
+        else:
+            c.execute(
+                "INSERT INTO feed(author, type, content, status, created_at) VALUES(?,?,?,?,?)",
+                ("system", "app", value, "sealed", now)
+            )
     c.commit(); c.close()
     return {"ok": True}
 @app.get("/api/sessions")
