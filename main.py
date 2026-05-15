@@ -982,7 +982,7 @@ def verify_session_token(token):
     except Exception:
         return False
 
-PUBLIC_PATHS = {"/login", "/api/login", "/manifest.json", "/sw.js", "/logo.svg", "/icon-192.png", "/icon-512.png"}
+PUBLIC_PATHS = {"/login", "/api/login", "/api/events", "/manifest.json", "/sw.js", "/logo.svg", "/icon-192.png", "/icon-512.png"}
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
