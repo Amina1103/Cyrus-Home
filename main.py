@@ -1993,14 +1993,39 @@ def _bj_month_range(month_str):
     end = datetime(y+1, 1, 1, 0, 0, 0, tzinfo=bj) if m == 12 else datetime(y, m+1, 1, 0, 0, 0, tzinfo=bj)
     return start.timestamp(), end.timestamp()
 
+def is_sleep_mode():
+    """判断当前是否应该休眠。
+    三层逻辑：
+      1. 03:00-07:59 无条件兜底休眠
+      2. 最近 24h 内有 sleep 事件 → 由 action 决定（on=休眠, off=活跃）
+      3. 24h 内无 sleep 信号 → 默认活跃（兜底时段已在第一层处理）
+    返回 (sleeping: bool, reason: str)。
+    """
+    now_bj = _beijing_now()
+    hour = now_bj.hour
+    if 3 <= hour < 8:
+        return True, f"兜底休眠时段, 北京时间 {hour}:00"
+    c = get_db()
+    row = c.execute(
+        "SELECT action, created_at FROM events WHERE type='sleep' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    c.close()
+    if row:
+        age_hours = (time.time() - row["created_at"]) / 3600
+        if age_hours < 24:
+            if row["action"] == "on":
+                return True, "收到 sleep=on 信号，她在睡觉"
+            return False, "收到 sleep=off 信号，她醒着"
+    return False, "无近期 sleep 信号，默认活跃"
+
 async def unified_heartbeat():
     print("Heartbeat: 检查中...")
     try:
-        now_bj = _beijing_now()
-        hour = now_bj.hour
-        if not (hour >= 11 or hour < 3):
-            print(f"Heartbeat: 不在活跃时段, 当前北京时间 {hour}:00")
+        sleeping, reason = is_sleep_mode()
+        if sleeping:
+            print(f"Heartbeat: 休眠中 — {reason}")
             return
+        now_bj = _beijing_now()
         if reading_active:
             await _do_reading_warmup()
             return
