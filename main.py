@@ -1291,6 +1291,27 @@ async def feed_reply(feed_id: int, req: FeedReply):
     c.close()
     return _feed_row_to_dict(updated)
 
+@app.delete("/api/feed/{feed_id}")
+async def feed_delete(feed_id: int):
+    c = get_db()
+    row = c.execute("SELECT images FROM feed WHERE id=?", (feed_id,)).fetchone()
+    if not row:
+        c.close()
+        return JSONResponse({"error": "not found"}, 404)
+    images_raw = row["images"]
+    c.execute("DELETE FROM feed WHERE id=?", (feed_id,))
+    c.commit(); c.close()
+    if images_raw:
+        try:
+            paths = json.loads(images_raw) or []
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"⚠ 解析 feed 图片路径失败 id={feed_id}: {e}")
+            paths = []
+        for p in paths:
+            try: os.remove(p)
+            except OSError as e: print(f"⚠ 删除 feed 图片失败 {p}: {e}")
+    return {"ok": True}
+
 @app.get("/api/feed/status")
 async def feed_status_get():
     c = get_db()

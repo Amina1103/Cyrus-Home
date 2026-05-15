@@ -170,7 +170,10 @@
         .fi-status-tag{font-size:11px;color:var(--dim);padding:1px 8px;background:var(--bg3);border-radius:8px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
         .fi-location{font-size:12px;color:var(--dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px}
         .fi-location svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;flex-shrink:0;opacity:.85}
-        .fi-time{font-size:11px;color:var(--dim);flex-shrink:0;padding-top:4px}
+        .fi-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;padding-top:2px}
+        .fi-time{font-size:11px;color:var(--dim);white-space:nowrap}
+        .fi-del{background:none;border:none;color:var(--dim);opacity:.35;font-size:15px;cursor:pointer;padding:2px 6px;line-height:1;font-family:inherit;border-radius:6px;transition:opacity .15s,background .15s}
+        .fi-del:hover,.fi-del:active{opacity:.85;background:rgba(232,200,122,.06)}
         .fi-body{font-size:16px;color:var(--cream);line-height:1.75;word-break:break-word;margin-bottom:10px;padding:0 2px}
         .fi-body:empty{display:none}
         /* image carousel — bleed to card edges */
@@ -596,6 +599,8 @@ function renderAvatarInto(wrapEl,who){if(!wrapEl)return;wrapEl.innerHTML='';wrap
 function pickAvatar(who){avatarPickWho=who;$('avatarFileInput').value='';$('avatarFileInput').click()}
 async function handleAvatarFile(files){if(!files||!files.length)return;const f=files[0];if(!f.type.startsWith('image/'))return;const fd=new FormData();fd.append('file',f);try{const r=await fetch('/api/avatar/upload?who='+avatarPickWho,{method:'POST',body:fd});const d=await r.json();if(d&&d.ok){avatarVersion=Date.now();showToast(avatarPickWho==='amina'?'Amina 头像已更新':'Cyrus 头像已更新');renderAvatarInto($('feedStatusAvatar'),'amina');renderAvatarInto($('cyrusAvatarPreview'),'cyrus');renderFeed()}else{showToast('上传失败')}}catch(e){showToast('上传失败')}$('avatarFileInput').value=''}
 function feedDayLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=new Date(dt.getTime()+(dt.getTimezoneOffset()+480)*60000);const y=bj.getFullYear(),m=pad2(bj.getMonth()+1),dd=pad2(bj.getDate());const ymd=y+'-'+m+'-'+dd;if(ymd===t.ymd)return'今天';const[tY,tM,tD]=t.ymd.split('-').map(Number);const yest=new Date(tY,tM-1,tD-1);const yymd=yest.getFullYear()+'-'+pad2(yest.getMonth()+1)+'-'+pad2(yest.getDate());if(ymd===yymd)return'昨天';return(bj.getMonth()+1)+'月'+bj.getDate()+'日'}
+function feedTimeLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=new Date(dt.getTime()+(dt.getTimezoneOffset()+480)*60000);const y=bj.getFullYear(),m=pad2(bj.getMonth()+1),dd=pad2(bj.getDate());const ymd=y+'-'+m+'-'+dd;const hm=pad2(bj.getHours())+':'+pad2(bj.getMinutes());if(ymd===t.ymd)return'今天 '+hm;const[tY,tM,tD]=t.ymd.split('-').map(Number);const yest=new Date(tY,tM-1,tD-1);const yymd=yest.getFullYear()+'-'+pad2(yest.getMonth()+1)+'-'+pad2(yest.getDate());if(ymd===yymd)return'昨天 '+hm;return bj.getFullYear()+'年'+(bj.getMonth()+1)+'月'+bj.getDate()+'日 '+hm}
+async function deleteFeed(fid){if(!confirm('确定删除这条动态吗？'))return;try{const r=await fetch('/api/feed/'+fid,{method:'DELETE'});const d=await r.json();if(d&&d.ok){feedItems=feedItems.filter(it=>it.id!==fid);renderFeed();showToast('已删除')}else{showToast('删除失败')}}catch(e){showToast('删除失败')}}
 function imgPathToUrl(p){if(!p)return'';if(p.startsWith('http')||p.startsWith('/'))return p;const fname=p.split(/[\\/]/).pop();return'/api/images/'+fname}
 async function showFeedView(){feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';renderAvatarInto($('feedStatusAvatar'),'amina');await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
 function onFeedScroll(){const el=$('feedList');if(el.scrollTop+el.clientHeight>=el.scrollHeight-120)loadFeed(false)}
@@ -618,7 +623,7 @@ function buildFeedCard(it){
     html+='</div>';
     if(it.location)html+='<div class="fi-location">'+LOCATION_PIN_SVG+'<span>'+escapeHtml(it.location)+'</span></div>';
     html+='</div>';
-    html+='<span class="fi-time">'+fmtTime(it.created_at)+'</span>';
+    html+='<div class="fi-actions"><span class="fi-time">'+escapeHtml(feedTimeLabel(it.created_at))+'</span><button class="fi-del" data-action="del" aria-label="删除" title="删除">×</button></div>';
     html+='</div>';
     if(it.content)html+='<div class="fi-body">'+escapeHtml(it.content).replace(/\n/g,'<br>')+'</div>';
     if(it.images&&it.images.length){
@@ -656,6 +661,8 @@ function buildFeedCard(it){
     if(sd)sd.addEventListener('click',()=>submitReply(it.id,card));
     const inp=card.querySelector('[data-role="reply-input"]');
     if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitReply(it.id,card)}});
+    const dl=card.querySelector('[data-action="del"]');
+    if(dl)dl.addEventListener('click',()=>deleteFeed(it.id));
     return card;
 }
 async function submitReply(fid,card){const inp=card.querySelector('[data-role="reply-input"]');if(!inp)return;const text=inp.value.trim();if(!text)return;const send=card.querySelector('[data-action="send-reply"]');if(send)send.disabled=true;try{const r=await fetch('/api/feed/'+fid+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text,author:'amina'})});const d=await r.json();if(d.error){showToast(d.error);if(send)send.disabled=false;return}const idx=feedItems.findIndex(x=>x.id===fid);if(idx>=0)feedItems[idx]=d;renderFeed()}catch(e){showToast('回复失败')}if(send)send.disabled=false}
