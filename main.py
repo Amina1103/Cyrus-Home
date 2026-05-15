@@ -1086,7 +1086,7 @@ async def chat_stream(req):
     tool_state = get_session_tool_state(req.session_id)
     # 持久化本次配置，供 cache_warmup 使用同样的桶预热
     try:
-        cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id, "budget_tokens": 10000 if req.thinking else 0})
+        cfg_str = json.dumps({"model": model, "thinking": bool(req.thinking), "session_id": req.session_id, "budget_tokens": 32000 if req.thinking else 0})
         _c = get_db()
         _c.execute("INSERT INTO settings(key,value) VALUES('last_chat_config',?) ON CONFLICT(key) DO UPDATE SET value=?", (cfg_str, cfg_str))
         _c.commit(); _c.close()
