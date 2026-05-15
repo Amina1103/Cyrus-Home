@@ -1121,6 +1121,7 @@ async def chat_stream(req):
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":32000}
     ti,to=0,0; tcr,tcc=0,0; tp,tc=[],[]; accumulated=""; saved=False; error_occurred=False
+    text_started=False; ts_buffer=""
     try:
         while True:
             fresh_state = get_session_tool_state(req.session_id)
@@ -1187,10 +1188,26 @@ async def chat_stream(req):
                         yield sse({"type":"thinking_delta","text":d.thinking})
                     elif dt == "text_delta":
                         accumulated += d.text
-                        yield sse({"type":"text_delta","text":d.text})
+                        if text_started:
+                            yield sse({"type":"text_delta","text":d.text})
+                        else:
+                            ts_buffer += d.text
+                            if not ts_buffer.startswith("["):
+                                text_started = True
+                                yield sse({"type":"text_delta","text":ts_buffer})
+                            elif "]" in ts_buffer or len(ts_buffer) >= 12:
+                                stripped = re.sub(r'^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*', '', ts_buffer, count=1)
+                                text_started = True
+                                if stripped:
+                                    yield sse({"type":"text_delta","text":stripped})
             first_event.set()
             await hb_task
             await worker_task
+            if not text_started and ts_buffer:
+                stripped = re.sub(r'^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*', '', ts_buffer, count=1)
+                text_started = True
+                if stripped:
+                    yield sse({"type":"text_delta","text":stripped})
             if "error" in final_holder:
                 raise final_holder["error"]
             final_msg = final_holder["final"]
@@ -1226,6 +1243,7 @@ async def chat_stream(req):
             kw["messages"]=recent
         md_label={"claude-sonnet-4-6":"Sonnet 4.6","claude-opus-4-6":"Opus 4.6"}.get(model, model)
         tokens_dict={"input":ti,"output":to,"cache_read":tcr,"cache_creation":tcc,"model":md_label}
+        accumulated = re.sub(r'^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*', '', accumulated, count=1)
         rt=db_add_message(req.session_id,"assistant",accumulated, tokens=tokens_dict); saved=True
         try:
             c2=get_db()
