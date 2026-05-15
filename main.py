@@ -725,6 +725,10 @@ async def fetch_ombre_tools():
 
 async def call_ombre(name,arguments):
     from mcp.client.streamable_http import streamablehttp_client; from mcp import ClientSession
+    if name in ("hold","grow") and arguments.get("content"):
+        ts = datetime.now(timezone(timedelta(hours=8))).strftime("[%Y-%m-%d %H:%M]")
+        if not arguments["content"].lstrip().startswith("["):
+            arguments = {**arguments, "content": f"{ts} {arguments['content']}"}
     async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
         async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; return "\n".join(texts) if texts else "没有找到"
 
@@ -766,9 +770,6 @@ async def execute_tool(name,args):
     elif name=="web_fetch": return await do_web_fetch(args.get("url",""))
     elif name=="github_read": return await do_github_read(args.get("owner",""),args.get("repo",""),args.get("path",""))
     else:
-        if name in ("hold","grow") and args.get("content"):
-            ts = datetime.now(timezone(timedelta(hours=8))).strftime("[%Y-%m-%d %H:%M]")
-            args = {**args, "content": f"{ts} {args['content']}"}
         return await call_ombre(name,args)
 
 # ══ App ══
