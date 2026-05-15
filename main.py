@@ -502,6 +502,18 @@ def crop_avatar(input_path, output_path):
         img = img.resize((200, 200), Image.LANCZOS)
         img.save(output_path, "JPEG", quality=82, optimize=True)
 
+def compress_feed_bg(input_path, output_path):
+    from PIL import Image, ImageOps
+    with Image.open(input_path) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        w, h = img.size
+        if max(w, h) > 1920:
+            ratio = 1920 / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        img.save(output_path, "JPEG", quality=80, optimize=True)
+
 def db_get_profile():
     c=get_db(); r=c.execute("SELECT value FROM settings WHERE key='profile'").fetchone(); c.close(); return r["value"] if r else ""
 def db_set_profile(t):
@@ -1333,6 +1345,35 @@ async def feed_status_set(req: FeedStatusCreate):
     )
     c.commit(); c.close()
     return {"ok": True}
+
+@app.post("/api/feed/background")
+async def feed_background_upload(file: UploadFile = File(...)):
+    img_id = uuid.uuid4().hex
+    src_name = file.filename or "image.jpg"
+    src_ext = src_name.rsplit(".", 1)[-1].lower() if "." in src_name else "jpg"
+    if src_ext not in ("jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "heic"):
+        src_ext = "jpg"
+    temp_path = f"data/images/feed_bg_tmp_{img_id}.{src_ext}"
+    final_path = "data/images/feed_bg.jpg"
+    content = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(content)
+    try:
+        await asyncio.to_thread(compress_feed_bg, temp_path, final_path)
+    except Exception as e:
+        try: os.remove(temp_path)
+        except OSError: pass
+        return JSONResponse({"ok": False, "error": str(e)}, 500)
+    try: os.remove(temp_path)
+    except OSError as e: print(f"⚠ 删除临时背景图失败 {temp_path}: {e}")
+    return {"ok": True}
+
+@app.get("/api/feed/background")
+async def feed_background_get():
+    path = "data/images/feed_bg.jpg"
+    if not os.path.exists(path):
+        return JSONResponse({"error": "not found"}, 404)
+    return FileResponse(path, media_type="image/jpeg")
 
 # ══ Avatars ══
 @app.post("/api/avatar/upload")
