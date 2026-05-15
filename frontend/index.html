@@ -145,16 +145,13 @@
         .msg.failed{opacity:.7}.msg.failed .retry-hint{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--warm)}.msg.failed .retry-hint button{background:none;border:1px solid var(--warm);border-radius:12px;color:var(--warm);font-size:11px;padding:2px 10px;cursor:pointer;font-family:'Noto Serif SC',serif}
         .summary-modal{position:fixed;inset:0;background:var(--scrim);z-index:60;display:none;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}.summary-modal.show{display:flex}.summary-modal-card{background:var(--bg2);border:1px solid rgba(232,200,122,.12);border-radius:16px;width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;box-shadow:var(--shadow-strong);font-family:'Noto Serif SC',serif}.summary-modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(232,200,122,.08)}.summary-modal-head .sm-title{color:var(--gold);font-size:14px;letter-spacing:2px}.summary-modal-head .sm-close{background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:4px 8px;font-family:inherit;line-height:1}.summary-modal-body{flex:1;overflow-y:auto;padding:16px 18px;color:var(--cream);font-size:13.5px;line-height:1.8;white-space:pre-wrap;word-break:break-word;-webkit-overflow-scrolling:touch}.summary-modal-body::-webkit-scrollbar{display:none}.summary-modal-body.empty{color:var(--dim);text-align:center;padding:50px 20px;font-size:13px;letter-spacing:1px}.summary-modal-foot{padding:12px 18px;border-top:1px solid rgba(232,200,122,.08);display:flex;justify-content:flex-end}.summary-modal-foot .sm-go{background:var(--gold);color:var(--bg);border:none;border-radius:18px;padding:8px 22px;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:2px}.summary-modal-foot .sm-go:disabled{opacity:.6;cursor:wait}
         /* ── Feed ── */
-        .feed-status-bar{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(232,200,122,.06);background:var(--bg2);flex-shrink:0;gap:10px}
-        .feed-status-left{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--cream);min-width:0;flex:1}
-        .feed-status-avatar-wrap{width:36px;height:36px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--gold);cursor:pointer;display:inline-block;position:relative;box-shadow:0 0 0 1px rgba(232,200,122,.18)}
+        .feed-status-bar{height:80px;padding:0 20px;display:flex;align-items:center;border-bottom:1px solid rgba(232,200,122,.06);background:var(--bg2);flex-shrink:0;gap:14px}
+        .feed-status-avatar-wrap{width:50px;height:50px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--gold);cursor:pointer;display:inline-block;position:relative;box-shadow:0 0 0 1px rgba(232,200,122,.2)}
         .feed-status-avatar-wrap.cyrus{background:var(--warm);box-shadow:0 0 0 1px rgba(192,112,64,.25)}
         .feed-status-avatar-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-        .feed-status-meta{display:flex;flex-direction:column;min-width:0;line-height:1.25}
-        .feed-status-name{color:var(--gold);letter-spacing:.5px;font-size:14px}
-        .feed-status-text{color:var(--cream);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
-        .feed-status-text.empty{color:var(--dim);opacity:.6}
-        .feed-status-edit{background:none;border:none;color:var(--gold-m);font-size:14px;cursor:pointer;padding:6px 10px;flex-shrink:0}
+        .feed-status-meta{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1;line-height:1.2;cursor:pointer}
+        .feed-status-name{color:var(--gold);font-size:18px;font-weight:600;letter-spacing:.3px}
+        .feed-status-text{color:var(--dim);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .feed-list{flex:1;overflow-y:auto;padding:14px 14px max(28px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}.feed-list::-webkit-scrollbar{display:none}
         .feed-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px;line-height:1.8}
         .feed-loading{text-align:center;color:var(--dim);padding:18px;font-size:12px;letter-spacing:1px}
@@ -290,14 +287,11 @@
         <button class="r-btn" id="feedAddBtn" onclick="openCompose()" style="font-size:22px;color:var(--gold)">+</button>
     </div>
     <div class="feed-status-bar">
-        <div class="feed-status-left">
-            <span class="feed-status-avatar-wrap" id="feedStatusAvatar" onclick="pickAvatar('amina')"></span>
-            <div class="feed-status-meta">
-                <span class="feed-status-name">Amina</span>
-                <span class="feed-status-text empty" id="feedStatusText">没设置</span>
-            </div>
+        <span class="feed-status-avatar-wrap" id="feedStatusAvatar" onclick="pickAvatar('amina')"></span>
+        <div class="feed-status-meta" onclick="openStatusModal()">
+            <span class="feed-status-name">Amina</span>
+            <span class="feed-status-text" id="feedStatusText">点击设置状态</span>
         </div>
-        <button class="feed-status-edit" onclick="openStatusModal()" aria-label="设置状态">✎</button>
     </div>
     <div class="feed-list" id="feedList"></div>
 </div>
@@ -605,7 +599,7 @@ function feedDayLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=
 function imgPathToUrl(p){if(!p)return'';if(p.startsWith('http')||p.startsWith('/'))return p;const fname=p.split(/[\\/]/).pop();return'/api/images/'+fname}
 async function showFeedView(){feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';renderAvatarInto($('feedStatusAvatar'),'amina');await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
 function onFeedScroll(){const el=$('feedList');if(el.scrollTop+el.clientHeight>=el.scrollHeight-120)loadFeed(false)}
-async function loadFeedStatus(){try{const r=await fetch('/api/feed/status');const d=await r.json();feedStatus=d.status||'';const el=$('feedStatusText');if(feedStatus){el.textContent=feedStatus;el.classList.remove('empty')}else{el.textContent='没设置';el.classList.add('empty')}}catch(e){}}
+async function loadFeedStatus(){try{const r=await fetch('/api/feed/status');const d=await r.json();feedStatus=d.status||'';const el=$('feedStatusText');el.textContent=feedStatus||'点击设置状态'}catch(e){}}
 async function loadFeed(reset){if(feedLoading)return;if(!reset&&!feedHasMore)return;feedLoading=true;const el=$('feedList');const savedTop=reset?0:el.scrollTop;try{const r=await fetch(`/api/feed?page=${feedPage}&limit=${feedLimit}`);const d=await r.json();const items=d.items||[];if(items.length<feedLimit)feedHasMore=false;if(reset)feedItems=items;else feedItems=feedItems.concat(items);renderFeed();if(!reset)el.scrollTop=savedTop;feedPage++}catch(e){if(reset)$('feedList').innerHTML='<div class="feed-empty">加载失败</div>'}feedLoading=false}
 function renderFeed(){const el=$('feedList');el.innerHTML='';const visible=feedItems.filter(it=>it.type!=='app');if(!visible.length){el.innerHTML='<div class="feed-empty">还没有动态<br>点右上角 + 发一条</div>';return}let lastDay=null;visible.forEach(it=>{const day=feedDayLabel(it.created_at);if(day!==lastDay){const sep=document.createElement('div');sep.className='feed-day-sep';sep.textContent=day;el.appendChild(sep);lastDay=day}el.appendChild(buildFeedCard(it))});if(feedLoading||feedHasMore){const tail=document.createElement('div');tail.className='feed-loading';tail.textContent=feedHasMore?'下拉加载更多':'';if(feedHasMore)el.appendChild(tail)}}
 const LOCATION_PIN_SVG='<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
