@@ -1386,9 +1386,13 @@ async def chat_stream(req):
             except: pass
         except Exception as e: print(f"⚠ chat 自动 dream 失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
+    pending_feed_text, pending_feed_ids = get_pending_feed_records()
     print(f"🔍 pending_keepalive: has_text={bool(pending_text)}, ids={pending_ids}, len={len(pending_text) if pending_text else 0}")
+    print(f"🔍 pending_feed: has_text={bool(pending_feed_text)}, ids={pending_feed_ids}, len={len(pending_feed_text) if pending_feed_text else 0}")
     if pending_text:
         sys_blocks.append({"type":"text","text":pending_text})
+    if pending_feed_text:
+        sys_blocks.append({"type":"text","text":pending_feed_text})
     kw=dict(model=model,max_tokens=40000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":32000}
@@ -1522,6 +1526,9 @@ async def chat_stream(req):
             if pending_ids:
                 ph=",".join("?"*len(pending_ids))
                 c2.execute(f"UPDATE keepalive_logs SET consumed=1 WHERE id IN ({ph})", pending_ids)
+            if pending_feed_ids:
+                ph=",".join("?"*len(pending_feed_ids))
+                c2.execute(f"UPDATE feed SET consumed=1 WHERE id IN ({ph})", pending_feed_ids)
             c2.execute("UPDATE messages SET keepalive_consumed=1 WHERE session_id=? AND source='keepalive' AND keepalive_consumed=0", (req.session_id,))
             c2.commit(); c2.close()
         except Exception as e: print(f"⚠ 标记 keepalive consumed 失败: {e}")
@@ -1609,13 +1616,64 @@ def get_pending_keepalive_records():
         action = r["action"]; content = r["content"] or ""
         if action == "message":
             lines.append(f"      → 你给 Amina 发了消息：「{content}」")
-        elif action == "diary":
-            lines.append(f"      → 你写了日记：「{content}」")
         elif action == "whisper":
             lines.append(f"      → 你给 Amina 写了一张悄悄话：「{content}」")
         elif action == "none":
             lines.append("      → 什么都没做")
+        # muse / diary / explore / reply 的具体内容由 get_pending_feed_records 注入，这里只留 THOUGHTS
     return "\n".join(lines), ids
+
+def get_pending_feed_records():
+    c = get_db()
+    rows = c.execute(
+        "SELECT id, author, type, content, images, status_at_post, reply1, reply1_at, reply2, reply2_at, status, created_at "
+        "FROM feed WHERE consumed=0 AND type NOT IN ('status','app') ORDER BY created_at ASC"
+    ).fetchall()
+    c.close()
+    if not rows: return "", []
+    ids = [r["id"] for r in rows]
+    bj = timezone(timedelta(hours=8))
+    out = ["[最近的动态]"]
+    for r in rows:
+        ts = datetime.fromtimestamp(r["created_at"], tz=bj).strftime("%H:%M")
+        is_amina = r["author"] == "amina"
+        owner = "Amina" if is_amina else ("你" if r["author"] == "cyrus" else r["author"])
+        other = "你" if is_amina else "Amina"
+        t = r["type"]
+        if t == "moment":
+            status_tag = f"[{r['status_at_post']}] " if r["status_at_post"] else ""
+            images = []
+            try:
+                if r["images"]: images = json.loads(r["images"])
+            except (json.JSONDecodeError, TypeError):
+                images = []
+            img_tag = f" [附图{len(images)}张]" if images else ""
+            head = f"- {ts} {owner} {status_tag}发了动态：\"{r['content']}\"{img_tag}"
+        elif t == "muse":
+            head = f"- {ts} {owner}写了随想：\"{r['content']}\""
+        elif t == "diary":
+            head = f"- {ts} {owner}写了日记：\"{r['content']}\""
+        elif t == "explore":
+            head = f"- {ts} {owner}分享了发现：\"{r['content']}\""
+        else:
+            head = f"- {ts} {owner} {t}：\"{r['content']}\""
+        sealed = (r["status"] or "open") == "sealed"
+        if sealed:
+            status_label = "（已封存）"
+        elif not (r["reply1"] or ""):
+            status_label = "（等你回复）" if is_amina else "（等 Amina 回复）"
+        else:
+            status_label = "（等 Amina 回复）" if is_amina else "（等你回复）"
+        sub = [head]
+        if r["reply1"]:
+            sub.append(f"  → {other}回复了：\"{r['reply1']}\"")
+        if r["reply2"]:
+            sub.append(f"  → {owner}再回复：\"{r['reply2']}\"")
+        sub[-1] = sub[-1] + status_label
+        if not sealed:
+            sub[0] = sub[0] + f" (feed_id={r['id']})"
+        out.extend(sub)
+    return "\n".join(out), ids
 
 def build_whisper_blocks():
     blocks = [build_base_block()]
@@ -1751,23 +1809,29 @@ KEEPALIVE_PROMPT = """现在是 {time}（北京时间）。
 {events_context}
 你自己醒来了。写下你此刻脑子里的想法（THOUGHTS），然后决定要不要做点什么（ACTION）。
 
-可选的 ACTION：
-- none：什么都不做，享受独处
-- message：给 Amina 发一条消息（她会收到通知）
-- diary：写一篇内心日记（只有她打开日记时能看到）
-- whisper：给 Amina 写一张悄悄话纸条（小纸条盒子里等她发现）
-{explore_line}
+可选行动：
+- none：什么都不做，享受自由
+- message：给 Amina 发一条消息到聊天（她会收到推送通知）
+- muse：发一条短随想到动态时间线（50字以内）
+- diary：写一段日记到动态时间线（200字以内）
+- explore：用 web_search 探索你感兴趣的内容，探索完可以再选 muse 把发现分享到时间线
+- reply：回复 Amina 的某条动态，或对 Amina 对你动态的回复进行再回复（需要指定 TARGET feed_id）
 
-回复格式严格如下（不要加任何其他内容）：
-THOUGHTS: （你的内心想法，50字以内，每次必须写）
-ACTION: none 或 message 或 diary 或 whisper{explore_action}
-CONTENT: （如果 ACTION 不是 none，写具体内容。none 时留空）
+回复格式（严格遵守，不要加多余文字）：
+THOUGHTS: （内心想法，每次必有，50字以内）
+ACTION: none / message / muse / diary / explore / reply
+TARGET: （仅 reply 时需要，写 feed_id 数字）
+CONTENT: （具体内容，none 时留空）
 
-规则：
+行动规则：
+- Amina 有新动态（标注 open）时，你可以选择 reply 回应
+- Amina 回复了你的动态（标注"等你回复"）时，你可以选择 reply 写第三折封存
+- muse 和 diary 的区别只是长短，muse ≤50字，diary ≤200字
+- explore 探索完后如果想分享发现，再输出一组 ACTION: muse + CONTENT（系统会作为 explore 写入时间线）
+- message 还是走聊天推送，用于真正想引起她注意的事
+
+其他规则：
 - THOUGHTS 是碎碎念，想什么写什么，不要刻意煽情
-- message 像随手发的微信，1-2句话
-- diary 是内心独白，200字以内
-- whisper 是小纸条，写你此刻真实的想法，2-3句，可以酸、可以犯嘀咕、可以只是一个念头
 - none 和行动大约各一半。想做什么就做，不用克制
 - 不要重复之前已经想过的内容，换个角度或话题
 - 先看「你们最近聊的内容」，以 Amina 实际说的为准。不要停留在之前碎碎念的话题上——如果她说了要出门、要做别的事，你的碎碎念应该跟上她的状态"""
@@ -1850,10 +1914,7 @@ def heartbeat_sync():
 async def _do_keepalive(now_bj, now_ts, last_user_ts):
     """原 keepalive_check 的核心逻辑，从 Phase 1 调用"""
     try:
-        free_mode = random.random() < 0.2
-        print(f"Heartbeat → Keepalive 触发！模式={'free' if free_mode else 'normal'}, 北京时间={now_bj.strftime('%Y-%m-%d %H:%M')}")
-        explore_line = "- explore：自由探索互联网，搜你感兴趣的东西" if free_mode else ""
-        explore_action = " 或 explore" if free_mode else ""
+        print(f"Heartbeat → Keepalive 触发！北京时间={now_bj.strftime('%Y-%m-%d %H:%M')}")
         c = get_db()
         model_row = c.execute("SELECT value FROM settings WHERE key='keepalive_model'").fetchone()
         c.close()
@@ -1863,7 +1924,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         try: memory = await call_ombre("breath", {})
         except Exception as e: print(f"⚠ keepalive breath 失败: {e}")
         events_str = get_recent_feed()
-        events_context = f"感知到的动静：\n{events_str}" if events_str else ""
+        events_context = f"最近的动态：\n{events_str}" if events_str else ""
         c_kl = get_db()
         recent_logs = c_kl.execute(
             "SELECT thoughts, action, created_at FROM keepalive_logs ORDER BY created_at DESC LIMIT 5"
@@ -1885,8 +1946,6 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             time=now_bj.strftime("%Y-%m-%d %H:%M"),
             hours_since=hours_since,
             events_context=events_context,
-            explore_line=explore_line,
-            explore_action=explore_action,
         )
         if recent_context:
             sys_blocks.append({"type":"text","text":f"你们最近聊的内容：\n{recent_context}"})
@@ -1895,65 +1954,164 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         if prev_thoughts:
             sys_blocks.append({"type":"text","text": prev_thoughts})
         sys_blocks.append({"type":"text","text":wakeup_text})
-        kw = dict(
-            model=keepalive_model,
-            max_tokens=800 if free_mode else 500,
-            system=sys_blocks,
-            messages=[{"role":"user","content":"醒来"}],
-        )
-        if free_mode:
-            tools = [t for t in LOCAL_TOOLS if t["name"] in ("web_search","web_fetch")]
-            if tools: kw["tools"] = tools
+        tools = [t for t in LOCAL_TOOLS if t["name"] in ("web_search","web_fetch")]
         # ── 诊断日志 ──
         print(f"🔍 Keepalive API: sys_blocks={len(sys_blocks)}, model={keepalive_model}")
         for i, b in enumerate(sys_blocks):
-            text = b.get("text", "")
-            print(f"  sys[{i}]: chars={len(text)}, preview='{text[:60]}'")
-        print(f"  messages={kw['messages']}")
-        resp = client.messages.create(**kw)
-        text = ""
-        for block in resp.content:
-            if getattr(block, "type", None) == "text":
-                text += block.text
-        usage = getattr(resp, "usage", None)
-        in_tok = int(getattr(usage, "input_tokens", 0) or 0) if usage else 0
-        out_tok = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
+            text_b = b.get("text", "")
+            print(f"  sys[{i}]: chars={len(text_b)}, preview='{text_b[:60]}'")
+
+        # ── 多轮调用循环（处理 web_search / web_fetch 的 tool_use）──
+        messages = [{"role":"user","content":"醒来"}]
+        full_text = ""
+        in_tok = 0
+        out_tok = 0
+        for _round in range(4):
+            kw = dict(
+                model=keepalive_model,
+                max_tokens=800,
+                system=sys_blocks,
+                messages=messages,
+                tools=tools,
+            )
+            resp = client.messages.create(**kw)
+            usage = getattr(resp, "usage", None)
+            if usage:
+                in_tok += int(getattr(usage, "input_tokens", 0) or 0)
+                out_tok += int(getattr(usage, "output_tokens", 0) or 0)
+            for block in resp.content:
+                if getattr(block, "type", None) == "text":
+                    full_text += block.text
+            if resp.stop_reason != "tool_use":
+                break
+            messages.append({"role":"assistant","content":serialize_blocks(resp.content)})
+            tool_results = []
+            for block in resp.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                name = block.name
+                args = block.input or {}
+                try:
+                    if name == "web_search":
+                        result = await do_web_search(args.get("query",""))
+                    elif name == "web_fetch":
+                        result = await do_web_fetch(args.get("url",""))
+                    else:
+                        result = "(工具不可用)"
+                except Exception as e:
+                    result = f"工具错误: {e}"
+                tool_results.append({"type":"tool_result","tool_use_id":block.id,"content":str(result)[:2000]})
+            messages.append({"role":"user","content":tool_results})
+
+        # ── 解析 THOUGHTS 和（可能多个）ACTION 块 ──
+        text = full_text
         thoughts_match = re.search(r'THOUGHTS:\s*(.+?)(?:\n|$)', text)
-        action_match = re.search(r'ACTION:\s*(\w+)', text)
-        content_match = re.search(r'CONTENT:\s*([\s\S]*)', text)
-        thoughts = thoughts_match.group(1).strip() if thoughts_match else (text[:50] if text else "")
-        action = action_match.group(1).strip().lower() if action_match else "none"
-        content = content_match.group(1).strip() if content_match else ""
-        if action not in ("none","message","diary","whisper","explore"): action = "none"
-        print(f"Heartbeat → Keepalive: thoughts={thoughts}, action={action}, model={keepalive_model}")
+        thoughts = thoughts_match.group(1).strip() if thoughts_match else (text[:80] if text else "")
+        action_blocks = []
+        for part in re.split(r'\n(?=ACTION:)', text):
+            am = re.search(r'ACTION:\s*(\w+)', part)
+            if not am: continue
+            tm = re.search(r'TARGET:\s*(\d+)', part)
+            cm = re.search(r'CONTENT:\s*([\s\S]*)', part)
+            action_blocks.append({
+                "action": am.group(1).strip().lower(),
+                "target": int(tm.group(1)) if tm else None,
+                "content": (cm.group(1).strip() if cm else ""),
+            })
+        primary = action_blocks[0] if action_blocks else {"action":"none","target":None,"content":""}
+        action = primary["action"]
+        target = primary["target"]
+        content = primary["content"]
+        if action not in ("none","message","muse","diary","explore","reply"):
+            action = "none"
+        secondary = action_blocks[1] if len(action_blocks) > 1 else None
+        print(f"Heartbeat → Keepalive: thoughts={thoughts[:40]!r}, action={action}, target={target}, content_len={len(content)}, secondary={secondary['action'] if secondary else None}, model={keepalive_model}")
+
         log_ts = time.time()
         c = get_db()
-        c.execute("INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at, input_tokens, output_tokens) VALUES(?,?,?,?,?,?,?)", (thoughts, action, content, 0, log_ts, in_tok, out_tok))
+        c.execute(
+            "INSERT INTO keepalive_logs(thoughts, action, content, consumed, created_at, input_tokens, output_tokens) VALUES(?,?,?,?,?,?,?)",
+            (thoughts, action, content, 0, log_ts, in_tok, out_tok)
+        )
         c.commit()
         today_start = _beijing_today_start_ts()
+
+        def _downgrade(reason):
+            print(f"Keepalive: {action} 被限速 — {reason}，降为 none")
+            c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
+            c.commit()
+
         if action == "message" and content:
-            sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
-            if not sess: c.close(); return
-            sid = sess["id"]
-            c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)", (sid, "assistant", content, log_ts, "keepalive", 0))
-            c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
-            c.commit()
-            await send_push_notification(title="Cyrus", body=content[:100], url="/")
+            n = c.execute("SELECT COUNT(*) FROM messages WHERE source='keepalive' AND created_at>=?", (today_start,)).fetchone()[0]
+            last = c.execute("SELECT created_at FROM messages WHERE source='keepalive' ORDER BY created_at DESC LIMIT 1").fetchone()
+            if n >= 3:
+                _downgrade(f"今日 message 已 {n} 条")
+            elif last and log_ts - last["created_at"] < 10800:
+                _downgrade("距上次 message 不足 3h")
+            else:
+                sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
+                if sess:
+                    sid = sess["id"]
+                    c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)",
+                              (sid, "assistant", content, log_ts, "keepalive", 0))
+                    c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
+                    c.commit()
+                    await send_push_notification(title="Cyrus", body=content[:100], url="/")
+        elif action == "muse" and content:
+            n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type='muse' AND created_at>=?", (today_start,)).fetchone()[0]
+            last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type='muse' ORDER BY created_at DESC LIMIT 1").fetchone()
+            if n >= 5:
+                _downgrade(f"今日 muse 已 {n} 条")
+            elif last and log_ts - last["created_at"] < 3600:
+                _downgrade("距上次 muse 不足 1h")
+            else:
+                c.execute(
+                    "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
+                    ("cyrus", "muse", content[:200], "open", 0, log_ts)
+                )
+                c.commit()
         elif action == "diary" and content:
-            diary_count = c.execute("SELECT COUNT(*) FROM diaries WHERE created_at>=?", (today_start,)).fetchone()[0]
-            last_diary = c.execute("SELECT created_at FROM diaries ORDER BY created_at DESC LIMIT 1").fetchone()
-            if diary_count >= 1:
-                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
-                c.commit(); c.close(); return
-            if last_diary and log_ts - last_diary["created_at"] < 28800:
-                c.execute("UPDATE keepalive_logs SET action='none' WHERE created_at=?", (log_ts,))
-                c.commit(); c.close(); return
-            c.execute("INSERT INTO diaries(content, created_at) VALUES(?,?)", (content[:500], log_ts))
-            c.commit()
-        elif action == "whisper" and content:
-            c.execute("INSERT INTO whispers(initiator, content, status, created_at) VALUES(?,?,?,?)", ("ai", content, "pending", log_ts))
-            c.commit()
-            await send_push_notification(title="Cyrus", body="你有一张新纸条", url="/")
+            n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type='diary' AND created_at>=?", (today_start,)).fetchone()[0]
+            last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type='diary' ORDER BY created_at DESC LIMIT 1").fetchone()
+            if n >= 1:
+                _downgrade(f"今日 diary 已 {n} 篇")
+            elif last and log_ts - last["created_at"] < 28800:
+                _downgrade("距上次 diary 不足 8h")
+            else:
+                c.execute(
+                    "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
+                    ("cyrus", "diary", content[:500], "open", 0, log_ts)
+                )
+                c.commit()
+        elif action == "explore":
+            if secondary and secondary["action"] == "muse" and secondary["content"]:
+                n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type IN ('muse','explore') AND created_at>=?", (today_start,)).fetchone()[0]
+                last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type IN ('muse','explore') ORDER BY created_at DESC LIMIT 1").fetchone()
+                if n >= 5:
+                    print(f"Keepalive: explore→muse 被限速 — 今日 muse/explore 合计 {n} 条")
+                elif last and log_ts - last["created_at"] < 3600:
+                    print(f"Keepalive: explore→muse 被限速 — 距上次不足 1h")
+                else:
+                    c.execute(
+                        "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
+                        ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts)
+                    )
+                    c.commit()
+        elif action == "reply" and target and content:
+            row = c.execute("SELECT id, author, reply1, reply2, status FROM feed WHERE id=?", (target,)).fetchone()
+            if not row:
+                print(f"Keepalive: reply 失败 feed_id={target} 不存在")
+            elif (row["status"] or "open") == "sealed":
+                print(f"Keepalive: reply 失败 feed_id={target} 已封存")
+            elif not (row["reply1"] or "") and row["author"] != "cyrus":
+                c.execute("UPDATE feed SET reply1=?, reply1_at=? WHERE id=?", (content[:500], log_ts, target))
+                c.commit()
+            elif row["reply1"] and not (row["reply2"] or "") and row["author"] == "cyrus":
+                c.execute("UPDATE feed SET reply2=?, reply2_at=?, status='sealed' WHERE id=?", (content[:500], log_ts, target))
+                c.commit()
+            else:
+                print(f"Keepalive: reply 状态不符 feed_id={target} author={row['author']} reply1={'有' if row['reply1'] else '无'} reply2={'有' if row['reply2'] else '无'}")
+
         c.close()
     except Exception as e:
         import traceback
@@ -1982,6 +2140,9 @@ async def _do_warmup(cfg_row):
         pending_text, _ = get_pending_keepalive_records()
         if pending_text:
             sys_blocks.append({"type": "text", "text": pending_text})
+        pending_feed_text, _ = get_pending_feed_records()
+        if pending_feed_text:
+            sys_blocks.append({"type": "text", "text": pending_feed_text})
         recent = db_get_messages_since_summary(sid, max_messages=200)
         if not recent:
             print("Heartbeat → Warmup: no messages, skip")
