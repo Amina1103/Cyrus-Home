@@ -763,6 +763,7 @@ def get_session_tool_state(sid):
         return ""
     breath_no_query_done = False
     dream_done = False
+    grow_done = False
     held_items = []
     for r in rows:
         name = r["tool_name"]
@@ -774,6 +775,8 @@ def get_session_tool_state(sid):
             breath_no_query_done = True
         elif name == "dream":
             dream_done = True
+        elif name == "grow":
+            grow_done = True
         elif name == "hold":
             content = inp.get("content", "")
             if content:
@@ -783,6 +786,8 @@ def get_session_tool_state(sid):
         parts.append("你在本次对话中已经完成了开场 breath()（无参数浮现），不需要再调。带 query 的 breath(query='关键词') 随时可以调，该搜就搜。")
     if dream_done:
         parts.append("你在本次对话中已经完成了开场 dream()（消化上一段对话存的记忆），不需要再调。")
+    if grow_done:
+        parts.append("你在本次对话中已经完成了 grow()（批量归档记忆），不需要再调。除非 Amina 明确再次要求。")
     if held_items:
         items_text = "\n".join(f"  - {item}" for item in held_items)
         parts.append(f"本次对话中你已经 hold 过以下内容，不要重复存相同或相似的内容：\n{items_text}")
