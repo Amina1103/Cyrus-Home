@@ -145,44 +145,53 @@
         .msg.failed{opacity:.7}.msg.failed .retry-hint{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--warm)}.msg.failed .retry-hint button{background:none;border:1px solid var(--warm);border-radius:12px;color:var(--warm);font-size:11px;padding:2px 10px;cursor:pointer;font-family:'Noto Serif SC',serif}
         .summary-modal{position:fixed;inset:0;background:var(--scrim);z-index:60;display:none;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}.summary-modal.show{display:flex}.summary-modal-card{background:var(--bg2);border:1px solid rgba(232,200,122,.12);border-radius:16px;width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;box-shadow:var(--shadow-strong);font-family:'Noto Serif SC',serif}.summary-modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(232,200,122,.08)}.summary-modal-head .sm-title{color:var(--gold);font-size:14px;letter-spacing:2px}.summary-modal-head .sm-close{background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:4px 8px;font-family:inherit;line-height:1}.summary-modal-body{flex:1;overflow-y:auto;padding:16px 18px;color:var(--cream);font-size:13.5px;line-height:1.8;white-space:pre-wrap;word-break:break-word;-webkit-overflow-scrolling:touch}.summary-modal-body::-webkit-scrollbar{display:none}.summary-modal-body.empty{color:var(--dim);text-align:center;padding:50px 20px;font-size:13px;letter-spacing:1px}.summary-modal-foot{padding:12px 18px;border-top:1px solid rgba(232,200,122,.08);display:flex;justify-content:flex-end}.summary-modal-foot .sm-go{background:var(--gold);color:var(--bg);border:none;border-radius:18px;padding:8px 22px;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:2px}.summary-modal-foot .sm-go:disabled{opacity:.6;cursor:wait}
         /* ── Feed ── */
-        .feed-status-bar{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(232,200,122,.06);background:var(--bg2);flex-shrink:0}
-        .feed-status-left{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--cream);min-width:0;flex:1}
-        .feed-status-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);flex-shrink:0;box-shadow:0 0 6px rgba(232,200,122,.4)}
-        .feed-status-name{color:var(--gold);letter-spacing:1px;flex-shrink:0}
-        .feed-status-text{color:var(--cream);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .feed-status-bar{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(232,200,122,.06);background:var(--bg2);flex-shrink:0;gap:10px}
+        .feed-status-left{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--cream);min-width:0;flex:1}
+        .feed-status-avatar-wrap{width:36px;height:36px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--gold);cursor:pointer;display:inline-block;position:relative;box-shadow:0 0 0 1px rgba(232,200,122,.18)}
+        .feed-status-avatar-wrap.cyrus{background:var(--warm);box-shadow:0 0 0 1px rgba(192,112,64,.25)}
+        .feed-status-avatar-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+        .feed-status-meta{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+        .feed-status-name{color:var(--gold);letter-spacing:.5px;font-size:14px}
+        .feed-status-text{color:var(--cream);opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
         .feed-status-text.empty{color:var(--dim);opacity:.6}
         .feed-status-edit{background:none;border:none;color:var(--gold-m);font-size:14px;cursor:pointer;padding:6px 10px;flex-shrink:0}
-        .feed-list{flex:1;overflow-y:auto;padding:14px 16px max(24px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}.feed-list::-webkit-scrollbar{display:none}
+        .feed-list{flex:1;overflow-y:auto;padding:14px 14px max(28px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}.feed-list::-webkit-scrollbar{display:none}
         .feed-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px;line-height:1.8}
         .feed-loading{text-align:center;color:var(--dim);padding:18px;font-size:12px;letter-spacing:1px}
-        .feed-day-sep{text-align:center;color:var(--gold-m);font-size:11px;letter-spacing:3px;margin:20px 0 12px;opacity:.7}
+        .feed-day-sep{text-align:center;color:var(--gold-m);font-size:11px;letter-spacing:3px;margin:24px 0 14px;opacity:.7}
         .feed-day-sep:first-child{margin-top:4px}
-        .feed-app-row{padding:8px 6px;color:var(--dim);font-size:12px;opacity:.7;letter-spacing:.5px}
-        .feed-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:14px;padding:14px 16px;margin-bottom:12px;animation:fadeUp .25s ease-out}
-        [data-theme="light"] .feed-item{background:rgba(255,255,255,0.5);border-color:rgba(0,0,0,0.06)}
-        .fi-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
-        .fi-author{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
-        .fi-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);flex-shrink:0}
-        .fi-dot.cyrus{background:var(--warm)}
-        .fi-name{font-size:13px;color:var(--gold);letter-spacing:.5px;flex-shrink:0}
+        .feed-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:16px;padding:14px 14px 12px;margin-bottom:18px;animation:fadeUp .25s ease-out;overflow:hidden}
+        [data-theme="light"] .feed-item{background:rgba(255,255,255,0.55);border-color:rgba(0,0,0,0.06)}
+        .fi-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:0 2px}
+        .fi-avatar-wrap{width:36px;height:36px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--gold);display:inline-block;position:relative;box-shadow:0 0 0 1px rgba(232,200,122,.15)}
+        .fi-avatar-wrap.cyrus{background:var(--warm);box-shadow:0 0 0 1px rgba(192,112,64,.25)}
+        .fi-avatar-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+        .fi-meta{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+        .fi-meta-row{display:flex;align-items:center;gap:8px;min-width:0}
+        .fi-name{font-size:14.5px;color:var(--gold);letter-spacing:.3px;font-weight:500;flex-shrink:0}
         .fi-name.cyrus{color:var(--warm)}
-        .fi-status-tag{font-size:11px;color:var(--dim);padding:1px 8px;background:var(--bg3);border-radius:8px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%}
-        .fi-time{font-size:11px;color:var(--dim);flex-shrink:0}
-        .fi-body{font-size:14.5px;color:var(--cream);line-height:1.7;word-break:break-word;margin-bottom:8px}
+        .fi-status-tag{font-size:11px;color:var(--dim);padding:1px 8px;background:var(--bg3);border-radius:8px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+        .fi-location{font-size:12px;color:var(--dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px}
+        .fi-location svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;flex-shrink:0;opacity:.85}
+        .fi-time{font-size:11px;color:var(--dim);flex-shrink:0;padding-top:4px}
+        .fi-body{font-size:16px;color:var(--cream);line-height:1.75;word-break:break-word;margin-bottom:10px;padding:0 2px}
         .fi-body:empty{display:none}
-        .fi-images{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-        .fi-images img{width:96px;height:96px;border-radius:10px;object-fit:cover;cursor:pointer;border:1px solid rgba(232,200,122,.08)}
-        .fi-replies{margin-top:10px;padding-top:10px;border-top:1px dashed rgba(232,200,122,.1)}
-        .fi-reply{font-size:13.5px;color:var(--cream);line-height:1.7;margin-bottom:6px;word-break:break-word}
-        .fi-reply:last-child{margin-bottom:0}
-        .fi-reply-author{color:var(--gold-m);margin-right:6px;font-size:12px}
-        .fi-reply-author.cyrus{color:var(--warm)}
-        .fi-reply-time{color:var(--dim);font-size:11px;margin-left:6px;opacity:.7}
-        .fi-sealed{font-size:11px;color:var(--dim);letter-spacing:2px;text-align:center;margin-top:10px;opacity:.6}
-        .fi-reply-btn{background:none;border:1px solid rgba(232,200,122,.12);color:var(--gold-m);font-size:12px;cursor:pointer;padding:5px 14px;margin-top:10px;border-radius:14px;font-family:inherit;letter-spacing:1px}
-        .fi-reply-btn:active{background:rgba(232,200,122,.06)}
-        .fi-reply-row{display:flex;gap:8px;margin-top:10px;align-items:center}
-        .fi-reply-row input{flex:1;background:var(--bg3);border:1px solid rgba(232,200,122,.12);border-radius:14px;padding:7px 14px;font-size:13px;color:var(--cream);outline:none;font-family:inherit;min-width:0}
+        /* image carousel — bleed to card edges */
+        .fi-carousel{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;margin:0 -14px 10px;padding:0 14px 0 14px;scroll-padding-left:14px}
+        .fi-carousel::-webkit-scrollbar{display:none}
+        .fi-carousel-item{flex:0 0 85%;scroll-snap-align:start;border-radius:14px;overflow:hidden;background:var(--bg3);position:relative}
+        .fi-carousel-item.single{flex:0 0 100%;margin-right:0}
+        .fi-carousel-item img{width:100%;height:auto;max-height:520px;display:block;object-fit:cover}
+        /* replies always visible */
+        .fi-replies{margin-top:8px;display:flex;flex-direction:column;gap:5px;padding:0 2px}
+        .fi-reply-line{font-size:13.5px;color:var(--cream);line-height:1.65;word-break:break-word;opacity:.92}
+        .fi-reply-line .reply-author{margin-right:6px;font-size:13px;font-weight:500}
+        .fi-reply-line .reply-author.amina{color:var(--gold)}
+        .fi-reply-line .reply-author.cyrus{color:var(--warm)}
+        .fi-reply-line .reply-time{margin-left:6px;font-size:10.5px;color:var(--dim);opacity:.6}
+        .fi-sealed{font-size:10.5px;color:var(--dim);margin-top:8px;letter-spacing:2px;opacity:.55;padding:0 2px}
+        .fi-reply-row{display:flex;gap:8px;margin-top:10px;align-items:center;padding:8px 2px 0;border-top:1px solid rgba(232,200,122,.06)}
+        .fi-reply-row input{flex:1;background:var(--bg3);border:1px solid rgba(232,200,122,.1);border-radius:16px;padding:7px 14px;font-size:13px;color:var(--cream);outline:none;font-family:inherit;min-width:0}
         .fi-reply-row input::placeholder{color:var(--dim)}
         .fi-reply-row .fi-reply-send{background:var(--gold);color:var(--bg);border:none;border-radius:50%;width:30px;height:30px;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
         /* status sheet */
@@ -200,6 +209,11 @@
         .feed-status-input::placeholder{color:var(--dim)}
         .feed-status-submit{background:var(--gold);color:var(--bg);border:none;border-radius:18px;padding:10px 22px;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:1px;flex-shrink:0}
         .feed-status-submit:disabled{opacity:.4}
+        .feed-status-cyrus-row{display:flex;align-items:center;justify-content:space-between;padding:14px 4px 4px;margin-top:14px;border-top:1px solid rgba(232,200,122,.08);font-size:13px;color:var(--cream);cursor:pointer}
+        .feed-status-cyrus-row .lbl{display:flex;align-items:center;gap:12px}
+        .feed-status-cyrus-row .av-wrap{width:38px;height:38px;border-radius:50%;background:var(--warm);overflow:hidden;flex-shrink:0;box-shadow:0 0 0 1px rgba(192,112,64,.25)}
+        .feed-status-cyrus-row .av-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+        .feed-status-cyrus-row .arrow{color:var(--gold-m);font-size:18px;line-height:1}
         /* compose */
         .feed-compose{position:fixed;inset:0;background:var(--bg);z-index:62;display:none;flex-direction:column}
         .feed-compose.show{display:flex}
@@ -210,6 +224,10 @@
         .feed-compose-body{flex:1;padding:18px 18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
         .feed-compose-text{width:100%;min-height:140px;background:transparent;border:none;font-size:16px;color:var(--cream);outline:none;resize:vertical;font-family:'Noto Serif SC',serif;line-height:1.8;padding:0}
         .feed-compose-text::placeholder{color:var(--dim)}
+        .feed-compose-location{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(232,200,122,.08);border-bottom:1px solid rgba(232,200,122,.08)}
+        .feed-compose-location svg{width:16px;height:16px;stroke:var(--gold-m);fill:none;stroke-width:1.6;flex-shrink:0}
+        .feed-compose-location input{flex:1;background:transparent;border:none;font-size:14px;color:var(--cream);outline:none;font-family:inherit;min-width:0;padding:2px 0}
+        .feed-compose-location input::placeholder{color:var(--dim)}
         .feed-compose-images{display:flex;flex-wrap:wrap;gap:8px}
         .fc-img-thumb{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;border:1px solid rgba(232,200,122,.12);background:var(--bg2)}
         .fc-img-thumb img{width:100%;height:100%;object-fit:cover}
@@ -273,9 +291,11 @@
     </div>
     <div class="feed-status-bar">
         <div class="feed-status-left">
-            <span class="feed-status-dot"></span>
-            <span class="feed-status-name">Amina</span>
-            <span class="feed-status-text empty" id="feedStatusText">没设置</span>
+            <span class="feed-status-avatar-wrap" id="feedStatusAvatar" onclick="pickAvatar('amina')"></span>
+            <div class="feed-status-meta">
+                <span class="feed-status-name">Amina</span>
+                <span class="feed-status-text empty" id="feedStatusText">没设置</span>
+            </div>
         </div>
         <button class="feed-status-edit" onclick="openStatusModal()" aria-label="设置状态">✎</button>
     </div>
@@ -290,8 +310,16 @@
             <input type="text" class="feed-status-input" id="feedStatusCustom" placeholder="自己写一个..." maxlength="20">
             <button class="feed-status-submit" onclick="submitCustomStatus()">确认</button>
         </div>
+        <div class="feed-status-cyrus-row" onclick="pickAvatar('cyrus')">
+            <div class="lbl">
+                <span class="av-wrap" id="cyrusAvatarPreview"></span>
+                <span>设置 Cyrus 头像</span>
+            </div>
+            <span class="arrow">›</span>
+        </div>
     </div>
 </div>
+<input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarFile(this.files)">
 <div class="feed-compose" id="feedCompose">
     <div class="feed-compose-head">
         <button class="feed-compose-close" onclick="closeCompose()" aria-label="关闭">✕</button>
@@ -299,6 +327,10 @@
     </div>
     <div class="feed-compose-body">
         <textarea class="feed-compose-text" id="feedComposeText" placeholder="写点什么..."></textarea>
+        <div class="feed-compose-location">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+            <input type="text" id="feedComposeLocation" placeholder="添加地点..." maxlength="60">
+        </div>
         <div class="feed-compose-images" id="feedComposeImages"></div>
         <input type="file" id="feedComposeFileInput" accept="image/*" multiple style="display:none" onchange="handleComposeFiles(this.files)">
     </div>
@@ -564,27 +596,86 @@ async function refreshPushStatus(){await initPush()}
 const STATUS_PRESETS=['在健身','在工作','在喝咖啡','在应酬','在coding','在发呆'];
 let feedStatus='',feedPage=1,feedLimit=20,feedLoading=false,feedHasMore=true,feedItems=[];
 let composeImages=[],feedScrollBound=false;
+let avatarVersion=Date.now(),avatarPickWho='amina';
+function avatarUrl(who){return '/api/avatar/'+who+'?v='+avatarVersion}
+function renderAvatarInto(wrapEl,who){if(!wrapEl)return;wrapEl.innerHTML='';wrapEl.classList.toggle('cyrus',who==='cyrus');const img=document.createElement('img');img.alt=who;img.src=avatarUrl(who);img.onerror=()=>{img.remove()};wrapEl.appendChild(img)}
+function pickAvatar(who){avatarPickWho=who;$('avatarFileInput').value='';$('avatarFileInput').click()}
+async function handleAvatarFile(files){if(!files||!files.length)return;const f=files[0];if(!f.type.startsWith('image/'))return;const fd=new FormData();fd.append('file',f);try{const r=await fetch('/api/avatar/upload?who='+avatarPickWho,{method:'POST',body:fd});const d=await r.json();if(d&&d.ok){avatarVersion=Date.now();showToast(avatarPickWho==='amina'?'Amina 头像已更新':'Cyrus 头像已更新');renderAvatarInto($('feedStatusAvatar'),'amina');renderAvatarInto($('cyrusAvatarPreview'),'cyrus');renderFeed()}else{showToast('上传失败')}}catch(e){showToast('上传失败')}$('avatarFileInput').value=''}
 function feedDayLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=new Date(dt.getTime()+(dt.getTimezoneOffset()+480)*60000);const y=bj.getFullYear(),m=pad2(bj.getMonth()+1),dd=pad2(bj.getDate());const ymd=y+'-'+m+'-'+dd;if(ymd===t.ymd)return'今天';const[tY,tM,tD]=t.ymd.split('-').map(Number);const yest=new Date(tY,tM-1,tD-1);const yymd=yest.getFullYear()+'-'+pad2(yest.getMonth()+1)+'-'+pad2(yest.getDate());if(ymd===yymd)return'昨天';return(bj.getMonth()+1)+'月'+bj.getDate()+'日'}
 function imgPathToUrl(p){if(!p)return'';if(p.startsWith('http')||p.startsWith('/'))return p;const fname=p.split(/[\\/]/).pop();return'/api/images/'+fname}
-async function showFeedView(){feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
+async function showFeedView(){feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';renderAvatarInto($('feedStatusAvatar'),'amina');await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
 function onFeedScroll(){const el=$('feedList');if(el.scrollTop+el.clientHeight>=el.scrollHeight-120)loadFeed(false)}
 async function loadFeedStatus(){try{const r=await fetch('/api/feed/status');const d=await r.json();feedStatus=d.status||'';const el=$('feedStatusText');if(feedStatus){el.textContent=feedStatus;el.classList.remove('empty')}else{el.textContent='没设置';el.classList.add('empty')}}catch(e){}}
 async function loadFeed(reset){if(feedLoading)return;if(!reset&&!feedHasMore)return;feedLoading=true;const el=$('feedList');const savedTop=reset?0:el.scrollTop;try{const r=await fetch(`/api/feed?page=${feedPage}&limit=${feedLimit}`);const d=await r.json();const items=d.items||[];if(items.length<feedLimit)feedHasMore=false;if(reset)feedItems=items;else feedItems=feedItems.concat(items);renderFeed();if(!reset)el.scrollTop=savedTop;feedPage++}catch(e){if(reset)$('feedList').innerHTML='<div class="feed-empty">加载失败</div>'}feedLoading=false}
 function renderFeed(){const el=$('feedList');el.innerHTML='';const visible=feedItems.filter(it=>it.type!=='app');if(!visible.length){el.innerHTML='<div class="feed-empty">还没有动态<br>点右上角 + 发一条</div>';return}let lastDay=null;visible.forEach(it=>{const day=feedDayLabel(it.created_at);if(day!==lastDay){const sep=document.createElement('div');sep.className='feed-day-sep';sep.textContent=day;el.appendChild(sep);lastDay=day}el.appendChild(buildFeedCard(it))});if(feedLoading||feedHasMore){const tail=document.createElement('div');tail.className='feed-loading';tail.textContent=feedHasMore?'下拉加载更多':'';if(feedHasMore)el.appendChild(tail)}}
-function buildFeedCard(it){const card=document.createElement('div');card.className='feed-item';card.dataset.fid=it.id;const isAmina=it.author==='amina';const name=isAmina?'Amina':(it.author==='cyrus'?'Cyrus':it.author);const otherName=isAmina?'Cyrus':'Amina';const cls=isAmina?'':'cyrus';let html='<div class="fi-head"><div class="fi-author">';html+='<span class="fi-dot '+cls+'"></span>';html+='<span class="fi-name '+cls+'">'+escapeHtml(name)+'</span>';if(it.status_at_post&&it.type==='moment')html+='<span class="fi-status-tag">'+escapeHtml(it.status_at_post)+'</span>';html+='</div><span class="fi-time">'+fmtTime(it.created_at)+'</span></div>';if(it.content)html+='<div class="fi-body">'+escapeHtml(it.content).replace(/\n/g,'<br>')+'</div>';if(it.images&&it.images.length){html+='<div class="fi-images">';it.images.forEach(p=>{const u=imgPathToUrl(p);html+='<img src="'+escapeHtml(u)+'" data-url="'+escapeHtml(u)+'">'});html+='</div>'}if(it.reply1||it.reply2){html+='<div class="fi-replies">';if(it.reply1){const rc=isAmina?'cyrus':'';html+='<div class="fi-reply"><span class="fi-reply-author '+rc+'">'+escapeHtml(otherName)+':</span>'+escapeHtml(it.reply1).replace(/\n/g,'<br>')+'<span class="fi-reply-time">'+fmtTime(it.reply1_at)+'</span></div>'}if(it.reply2){const rc=isAmina?'':'cyrus';html+='<div class="fi-reply"><span class="fi-reply-author '+rc+'">'+escapeHtml(name)+':</span>'+escapeHtml(it.reply2).replace(/\n/g,'<br>')+'<span class="fi-reply-time">'+fmtTime(it.reply2_at)+'</span></div>'}html+='</div>'}if(it.status==='sealed'){html+='<div class="fi-sealed">— 已封存 —</div>'}else{const canReply=(!it.reply1&&it.author!=='amina')||(it.reply1&&!it.reply2&&it.author==='amina');if(canReply){html+='<button class="fi-reply-btn" data-action="toggle-reply">回复</button>';html+='<div class="fi-reply-row" data-role="reply-row" style="display:none"><input type="text" placeholder="回复..." data-role="reply-input"><button class="fi-reply-send" data-action="send-reply">↑</button></div>'}}card.innerHTML=html;card.querySelectorAll('.fi-images img').forEach(img=>{img.addEventListener('click',()=>showImagePreview(img.dataset.url))});const tg=card.querySelector('[data-action="toggle-reply"]');if(tg)tg.addEventListener('click',()=>toggleReply(card));const sd=card.querySelector('[data-action="send-reply"]');if(sd)sd.addEventListener('click',()=>submitReply(it.id,card));const inp=card.querySelector('[data-role="reply-input"]');if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitReply(it.id,card)}});return card}
-function toggleReply(card){const row=card.querySelector('[data-role="reply-row"]');if(!row)return;const showing=row.style.display==='flex';row.style.display=showing?'none':'flex';if(!showing){const inp=row.querySelector('input');if(inp)inp.focus()}}
+const LOCATION_PIN_SVG='<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+function buildFeedCard(it){
+    const card=document.createElement('div');card.className='feed-item';card.dataset.fid=it.id;
+    const isAmina=it.author==='amina';
+    const name=isAmina?'Amina':(it.author==='cyrus'?'Cyrus':it.author);
+    const otherName=isAmina?'Cyrus':'Amina';
+    const cls=isAmina?'':'cyrus';
+    const avatarWho=isAmina?'amina':'cyrus';
+    let html='<div class="fi-head">';
+    html+='<span class="fi-avatar-wrap '+cls+'"><img alt="'+escapeHtml(name)+'" src="'+escapeHtml(avatarUrl(avatarWho))+'" onerror="this.remove()"></span>';
+    html+='<div class="fi-meta"><div class="fi-meta-row">';
+    html+='<span class="fi-name '+cls+'">'+escapeHtml(name)+'</span>';
+    if(it.status_at_post&&it.type==='moment')html+='<span class="fi-status-tag">'+escapeHtml(it.status_at_post)+'</span>';
+    html+='</div>';
+    if(it.location)html+='<div class="fi-location">'+LOCATION_PIN_SVG+'<span>'+escapeHtml(it.location)+'</span></div>';
+    html+='</div>';
+    html+='<span class="fi-time">'+fmtTime(it.created_at)+'</span>';
+    html+='</div>';
+    if(it.content)html+='<div class="fi-body">'+escapeHtml(it.content).replace(/\n/g,'<br>')+'</div>';
+    if(it.images&&it.images.length){
+        const single=it.images.length===1?' single':'';
+        html+='<div class="fi-carousel">';
+        it.images.forEach(p=>{
+            const u=imgPathToUrl(p);
+            html+='<div class="fi-carousel-item'+single+'"><img src="'+escapeHtml(u)+'" alt=""></div>';
+        });
+        html+='</div>';
+    }
+    const hasReply=it.reply1||it.reply2;
+    if(hasReply){
+        html+='<div class="fi-replies">';
+        if(it.reply1){
+            const rc=isAmina?'cyrus':'amina';
+            html+='<div class="fi-reply-line"><span class="reply-author '+rc+'">'+escapeHtml(otherName)+'</span>'+escapeHtml(it.reply1).replace(/\n/g,'<br>')+'<span class="reply-time">'+fmtTime(it.reply1_at)+'</span></div>';
+        }
+        if(it.reply2){
+            const rc=isAmina?'amina':'cyrus';
+            html+='<div class="fi-reply-line"><span class="reply-author '+rc+'">'+escapeHtml(name)+'</span>'+escapeHtml(it.reply2).replace(/\n/g,'<br>')+'<span class="reply-time">'+fmtTime(it.reply2_at)+'</span></div>';
+        }
+        html+='</div>';
+    }
+    if(it.status==='sealed'){
+        html+='<div class="fi-sealed">已封存</div>';
+    }else{
+        const canReply=(!it.reply1&&it.author!=='amina')||(it.reply1&&!it.reply2&&it.author==='amina');
+        if(canReply){
+            html+='<div class="fi-reply-row" data-role="reply-row"><input type="text" placeholder="写一条回复..." data-role="reply-input"><button class="fi-reply-send" data-action="send-reply">↑</button></div>';
+        }
+    }
+    card.innerHTML=html;
+    const sd=card.querySelector('[data-action="send-reply"]');
+    if(sd)sd.addEventListener('click',()=>submitReply(it.id,card));
+    const inp=card.querySelector('[data-role="reply-input"]');
+    if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitReply(it.id,card)}});
+    return card;
+}
 async function submitReply(fid,card){const inp=card.querySelector('[data-role="reply-input"]');if(!inp)return;const text=inp.value.trim();if(!text)return;const send=card.querySelector('[data-action="send-reply"]');if(send)send.disabled=true;try{const r=await fetch('/api/feed/'+fid+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text,author:'amina'})});const d=await r.json();if(d.error){showToast(d.error);if(send)send.disabled=false;return}const idx=feedItems.findIndex(x=>x.id===fid);if(idx>=0)feedItems[idx]=d;renderFeed()}catch(e){showToast('回复失败')}if(send)send.disabled=false}
-function openStatusModal(){$('feedStatusModal').classList.add('show');$('feedStatusCustom').value='';renderStatusPresets()}
+function openStatusModal(){$('feedStatusModal').classList.add('show');$('feedStatusCustom').value='';renderStatusPresets();renderAvatarInto($('cyrusAvatarPreview'),'cyrus')}
 function closeStatusModal(){$('feedStatusModal').classList.remove('show')}
 function renderStatusPresets(){const el=$('feedStatusPresets');el.innerHTML='';STATUS_PRESETS.forEach(s=>{const b=document.createElement('button');b.className='feed-status-preset';if(s===feedStatus)b.classList.add('active');b.textContent=s;b.onclick=()=>submitStatus(s);el.appendChild(b)})}
 async function submitStatus(content){if(!content)return;try{await fetch('/api/feed/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})});closeStatusModal();await loadFeedStatus()}catch(e){showToast('保存失败')}}
 function submitCustomStatus(){const v=$('feedStatusCustom').value.trim();if(!v)return;submitStatus(v)}
-function openCompose(){$('feedCompose').classList.add('show');$('feedComposeText').value='';composeImages=[];renderComposeImages();setTimeout(()=>$('feedComposeText').focus(),50)}
-function closeCompose(){$('feedCompose').classList.remove('show');composeImages=[]}
+function openCompose(){$('feedCompose').classList.add('show');$('feedComposeText').value='';$('feedComposeLocation').value='';composeImages=[];renderComposeImages();setTimeout(()=>$('feedComposeText').focus(),50)}
+function closeCompose(){$('feedCompose').classList.remove('show');composeImages=[];$('feedComposeLocation').value=''}
 async function handleComposeFiles(files){const publishBtn=$('feedComposePublish');publishBtn.disabled=true;for(const f of files){if(!f.type.startsWith('image/'))continue;const placeholder={path:'',preview:URL.createObjectURL(f),uploading:true};composeImages.push(placeholder);renderComposeImages();try{const fd=new FormData();fd.append('file',f);const r=await fetch('/api/feed/upload',{method:'POST',body:fd});const d=await r.json();const idx=composeImages.indexOf(placeholder);if(d&&d.ok&&d.path){if(idx>=0){placeholder.path=d.path;placeholder.uploading=false;try{URL.revokeObjectURL(placeholder.preview)}catch(e){}placeholder.preview=imgPathToUrl(d.path)}}else{if(idx>=0)composeImages.splice(idx,1);showToast('上传失败')}}catch(e){const idx=composeImages.indexOf(placeholder);if(idx>=0)composeImages.splice(idx,1);showToast('上传失败')}renderComposeImages()}$('feedComposeFileInput').value='';publishBtn.disabled=false}
 function renderComposeImages(){const el=$('feedComposeImages');el.innerHTML='';composeImages.forEach((img,i)=>{const t=document.createElement('div');t.className='fc-img-thumb'+(img.uploading?' uploading':'');const im=document.createElement('img');im.src=img.preview;t.appendChild(im);const rm=document.createElement('button');rm.className='remove';rm.textContent='✕';rm.onclick=()=>removeComposeImage(i);t.appendChild(rm);el.appendChild(t)});const add=document.createElement('div');add.className='fc-img-add';add.textContent='+';add.onclick=()=>$('feedComposeFileInput').click();el.appendChild(add)}
 function removeComposeImage(i){const img=composeImages[i];if(img&&img.uploading){return}composeImages.splice(i,1);renderComposeImages()}
-async function publishCompose(){const text=$('feedComposeText').value.trim();const imgs=composeImages.filter(i=>!i.uploading&&i.path).map(i=>i.path);if(!text&&!imgs.length){showToast('写点什么吧');return}if(composeImages.some(i=>i.uploading)){showToast('图片还在上传...');return}const btn=$('feedComposePublish');btn.disabled=true;btn.textContent='发布中...';try{const body={type:'moment',content:text,images:imgs};const r=await fetch('/api/feed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(d&&d.id){closeCompose();showFeedView()}else{showToast('发布失败')}}catch(e){showToast('发布失败')}btn.disabled=false;btn.textContent='发布'}
+async function publishCompose(){const text=$('feedComposeText').value.trim();const location=$('feedComposeLocation').value.trim();const imgs=composeImages.filter(i=>!i.uploading&&i.path).map(i=>i.path);if(!text&&!imgs.length){showToast('写点什么吧');return}if(composeImages.some(i=>i.uploading)){showToast('图片还在上传...');return}const btn=$('feedComposePublish');btn.disabled=true;btn.textContent='发布中...';try{const body={type:'moment',content:text,images:imgs,location:location};const r=await fetch('/api/feed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(d&&d.id){closeCompose();showFeedView()}else{showToast('发布失败')}}catch(e){showToast('发布失败')}btn.disabled=false;btn.textContent='发布'}
 function showImagePreview(url){if(!url)return;$('imgPreviewImg').src=url;$('imgPreviewOverlay').classList.add('show')}
 function hideImagePreview(){$('imgPreviewOverlay').classList.remove('show');$('imgPreviewImg').src=''}
 

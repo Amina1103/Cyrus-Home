@@ -456,6 +456,8 @@ def init_db():
     except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE messages ADD COLUMN model TEXT DEFAULT NULL")
     except sqlite3.OperationalError: pass  # 列已存在
+    try: conn.execute("ALTER TABLE feed ADD COLUMN location TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass  # 列已存在
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def compress_image(input_path, output_path):
@@ -485,6 +487,20 @@ def compress_image(input_path, output_path):
             ratio = 1200 / max(w, h)
             img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
         img.save(output_path, "JPEG", quality=80, optimize=True)
+
+def crop_avatar(input_path, output_path):
+    from PIL import Image, ImageOps
+    with Image.open(input_path) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        w, h = img.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+        img = img.resize((200, 200), Image.LANCZOS)
+        img.save(output_path, "JPEG", quality=82, optimize=True)
 
 def db_get_profile():
     c=get_db(); r=c.execute("SELECT value FROM settings WHERE key='profile'").fetchone(); c.close(); return r["value"] if r else ""
@@ -1149,6 +1165,7 @@ class FeedCreate(BaseModel):
     type: str
     content: str = ""
     images: list[str] = []
+    location: str = ""
 
 class FeedReply(BaseModel):
     content: str
@@ -1156,6 +1173,13 @@ class FeedReply(BaseModel):
 
 class FeedStatusCreate(BaseModel):
     content: str
+
+def _row_get(r, key, default=""):
+    try:
+        v = r[key]
+        return v if v is not None else default
+    except (IndexError, KeyError):
+        return default
 
 def _feed_row_to_dict(r):
     images = []
@@ -1168,6 +1192,7 @@ def _feed_row_to_dict(r):
         "type": r["type"],
         "content": r["content"] or "",
         "images": images,
+        "location": _row_get(r, "location", ""),
         "status_at_post": r["status_at_post"] or "",
         "reply1": r["reply1"] or "",
         "reply1_at": r["reply1_at"] or 0,
@@ -1224,9 +1249,9 @@ async def feed_create(req: FeedCreate):
     status_at_post = status_row["content"] if status_row else ""
     images_json = json.dumps(req.images) if req.images else None
     cur = c.execute(
-        "INSERT INTO feed(author, type, content, images, status_at_post, created_at) "
-        "VALUES(?,?,?,?,?,?)",
-        ("amina", req.type, req.content or "", images_json, status_at_post, now)
+        "INSERT INTO feed(author, type, content, images, status_at_post, location, created_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        ("amina", req.type, req.content or "", images_json, status_at_post, (req.location or "").strip()[:80], now)
     )
     fid = cur.lastrowid
     c.commit()
@@ -1287,6 +1312,40 @@ async def feed_status_set(req: FeedStatusCreate):
     )
     c.commit(); c.close()
     return {"ok": True}
+
+# ══ Avatars ══
+@app.post("/api/avatar/upload")
+async def avatar_upload(who: str, file: UploadFile = File(...)):
+    if who not in ("amina", "cyrus"):
+        return JSONResponse({"error": "invalid who"}, 400)
+    img_id = uuid.uuid4().hex
+    src_name = file.filename or "image.jpg"
+    src_ext = src_name.rsplit(".", 1)[-1].lower() if "." in src_name else "jpg"
+    if src_ext not in ("jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "heic"):
+        src_ext = "jpg"
+    temp_path = f"data/images/avatar_tmp_{img_id}.{src_ext}"
+    final_path = f"data/images/avatar_{who}.jpg"
+    content = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(content)
+    try:
+        await asyncio.to_thread(crop_avatar, temp_path, final_path)
+    except Exception as e:
+        try: os.remove(temp_path)
+        except OSError: pass
+        return JSONResponse({"ok": False, "error": str(e)}, 500)
+    try: os.remove(temp_path)
+    except OSError as e: print(f"⚠ 删除临时头像失败 {temp_path}: {e}")
+    return {"ok": True}
+
+@app.get("/api/avatar/{who}")
+async def avatar_get(who: str):
+    if who not in ("amina", "cyrus"):
+        return JSONResponse({"error": "invalid who"}, 400)
+    path = f"data/images/avatar_{who}.jpg"
+    if not os.path.exists(path):
+        return JSONResponse({"error": "not found"}, 404)
+    return FileResponse(path, media_type="image/jpeg")
 
 # ══ Thinking bookmarks ══
 class ThinkingBookmarkRequest(BaseModel):
