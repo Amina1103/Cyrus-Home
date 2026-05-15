@@ -617,6 +617,7 @@ def get_session_tool_state(sid):
     if not rows:
         return ""
     breath_no_query_done = False
+    dream_done = False
     held_items = []
     for r in rows:
         name = r["tool_name"]
@@ -626,6 +627,8 @@ def get_session_tool_state(sid):
             inp = {}
         if name == "breath" and not inp.get("query", ""):
             breath_no_query_done = True
+        elif name == "dream":
+            dream_done = True
         elif name == "hold":
             content = inp.get("content", "")
             if content:
@@ -633,6 +636,8 @@ def get_session_tool_state(sid):
     parts = []
     if breath_no_query_done:
         parts.append("你在本次对话中已经完成了开场 breath()（无参数浮现），不需要再调。带 query 的 breath(query='关键词') 随时可以调，该搜就搜。")
+    if dream_done:
+        parts.append("你在本次对话中已经完成了开场 dream()（消化上一段对话存的记忆），不需要再调。")
     if held_items:
         items_text = "\n".join(f"  - {item}" for item in held_items)
         parts.append(f"本次对话中你已经 hold 过以下内容，不要重复存相同或相似的内容：\n{items_text}")
@@ -1092,6 +1097,15 @@ async def chat_stream(req):
             if mem: sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{mem}"})
             yield sse({"type":"tools","calls":[{"name":"breath","input":{},"result_preview":mem[:200] if mem else "（空）"}]})
         except Exception as e: print(f"⚠ chat 浮现记忆失败: {e}")
+        yield sse({"type":"status","text":"正在联想..."})
+        try:
+            dm=await call_ombre("dream",{})
+            if dm: sys_blocks.append({"type":"text","text":f"联想的记忆：\n{dm}"})
+            yield sse({"type":"tools","calls":[{"name":"dream","input":{},"result_preview":dm[:200] if dm else "（空）"}]})
+            try:
+                c_tc=get_db(); c_tc.execute("INSERT INTO tool_calls(session_id,tool_name,input_json,created_at) VALUES(?,?,?,?)",(req.session_id,"dream",json.dumps({},ensure_ascii=False),time.time())); c_tc.commit(); c_tc.close()
+            except: pass
+        except Exception as e: print(f"⚠ chat 自动 dream 失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
     print(f"🔍 pending_keepalive: has_text={bool(pending_text)}, ids={pending_ids}, len={len(pending_text) if pending_text else 0}")
     if pending_text:
