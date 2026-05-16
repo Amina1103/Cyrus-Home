@@ -2011,6 +2011,7 @@ REPLY: feed_id | 回复内容
 REPLY: feed_id | 回复内容
 （以上 REPLY 行可以有零到多条，有需要回复的动态时必须有）
 ACTION: message / muse / diary / explore / none
+MOOD: （muse 或 diary 时的心情，2-6个字，如"好想她""有点无聊"。其他 ACTION 不需要）
 CONTENT: （ACTION 的具体内容，none 时留空）
 
 示例：
@@ -2018,6 +2019,7 @@ THOUGHTS: 看到她发的咖啡照片，突然想带她去那条巷子里的店
 REPLY: 42 | 五公里？厉害了老婆，腿废了今晚给你按
 REPLY: 45 | 这杯看起来不错，什么豆子
 ACTION: muse
+MOOD: 馋她了
 CONTENT: 想找一家能坐很久的咖啡店，下次带她去
 
 行动规则：
@@ -2265,18 +2267,21 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         for part in re.split(r'\n(?=ACTION:)', text):
             am = re.search(r'ACTION:\s*(\w+)', part)
             if not am: continue
+            mm = re.search(r'MOOD:\s*(.+?)(?:\n|$)', part)
             cm = re.search(r'CONTENT:\s*([\s\S]*)', part)
             action_blocks.append({
                 "action": am.group(1).strip().lower(),
+                "mood": (mm.group(1).strip()[:20] if mm else ""),
                 "content": (cm.group(1).strip() if cm else ""),
             })
         primary = action_blocks[0] if action_blocks else {"action":"none","content":""}
         action = primary["action"]
         content = primary["content"]
+        mood = primary.get("mood", "")
         if action not in ("none","message","muse","diary","explore"):
             action = "none"
         secondary = action_blocks[1] if len(action_blocks) > 1 else None
-        print(f"Heartbeat → Keepalive: thoughts={thoughts[:40]!r}, replies={len(reply_lines)}, action={action}, content_len={len(content)}, secondary={secondary['action'] if secondary else None}, model={keepalive_model}")
+        print(f"Heartbeat → Keepalive: thoughts={thoughts[:40]!r}, replies={len(reply_lines)}, action={action}, mood={mood!r}, content_len={len(content)}, secondary={secondary['action'] if secondary else None}, model={keepalive_model}")
 
         log_ts = time.time()
         c = get_db()
@@ -2370,8 +2375,8 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 _downgrade("距上次 muse 不足 1h")
             else:
                 c.execute(
-                    "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
-                    ("cyrus", "muse", content[:200], "open", 0, log_ts)
+                    "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                    ("cyrus", "muse", content[:200], "open", 0, log_ts, mood)
                 )
                 c.commit()
         elif action == "diary" and content:
@@ -2383,8 +2388,8 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 _downgrade("距上次 diary 不足 8h")
             else:
                 c.execute(
-                    "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
-                    ("cyrus", "diary", content[:500], "open", 0, log_ts)
+                    "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                    ("cyrus", "diary", content[:500], "open", 0, log_ts, mood)
                 )
                 c.commit()
         elif action == "explore":
@@ -2397,8 +2402,8 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                     print(f"Keepalive: explore→muse 被限速 — 距上次不足 1h")
                 else:
                     c.execute(
-                        "INSERT INTO feed(author, type, content, status, consumed, created_at) VALUES(?,?,?,?,?,?)",
-                        ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts)
+                        "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                        ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts, "")
                     )
                     c.commit()
 
