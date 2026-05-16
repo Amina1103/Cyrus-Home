@@ -709,26 +709,44 @@ def get_recent_feed(hours=6):
                 except (json.JSONDecodeError, TypeError):
                     images = []
                 img_tag = f" [附图{len(images)}张]" if images else ""
-                lines.append(
+                sub = [
                     f"- {ts} {author} {status_tag}发了动态：\"{r['content']}\"{img_tag} "
                     f"(feed_id={r['id']}, {r['status']})"
-                )
+                ]
                 if r["reply1"]:
                     other = "Cyrus" if r["author"] == "amina" else "Amina"
-                    lines.append(f"  → {other} 回复了：\"{r['reply1']}\"")
+                    sub.append(f"  → {other} 回复了：\"{r['reply1']}\"")
                 if r["reply2"]:
-                    lines.append(f"  → {author} 再回复：\"{r['reply2']}\"")
+                    sub.append(f"  → {author} 再回复：\"{r['reply2']}\"")
+                is_amina = r["author"] == "amina"
+                sealed = (r["status"] or "open") == "sealed"
+                if sealed:
+                    sub[-1] = sub[-1] + "（已封存）"
+                elif not (r["reply1"] or ""):
+                    sub[-1] = sub[-1] + ("（等你回复）" if is_amina else "（等 Amina 回复）")
+                elif not (r["reply2"] or ""):
+                    sub[-1] = sub[-1] + ("（等 Amina 回复）" if is_amina else "（等你回复）")
+                lines.extend(sub)
             elif t in ("muse", "diary", "explore"):
                 type_label = {"muse": "随手写", "diary": "写了日记", "explore": "探索了"}[t]
-                lines.append(
+                sub = [
                     f"- {ts} {author} {type_label}：\"{r['content']}\" "
                     f"(feed_id={r['id']}, {r['status']})"
-                )
+                ]
                 if r["reply1"]:
                     other = "Cyrus" if r["author"] == "amina" else "Amina"
-                    lines.append(f"  → {other} 回复了：\"{r['reply1']}\"")
+                    sub.append(f"  → {other} 回复了：\"{r['reply1']}\"")
                 if r["reply2"]:
-                    lines.append(f"  → {author} 再回复：\"{r['reply2']}\"")
+                    sub.append(f"  → {author} 再回复：\"{r['reply2']}\"")
+                is_amina = r["author"] == "amina"
+                sealed = (r["status"] or "open") == "sealed"
+                if sealed:
+                    sub[-1] = sub[-1] + "（已封存）"
+                elif not (r["reply1"] or ""):
+                    sub[-1] = sub[-1] + ("（等你回复）" if is_amina else "（等 Amina 回复）")
+                elif not (r["reply2"] or ""):
+                    sub[-1] = sub[-1] + ("（等 Amina 回复）" if is_amina else "（等你回复）")
+                lines.extend(sub)
     return "\n".join(lines)
 
 def build_base_block():
