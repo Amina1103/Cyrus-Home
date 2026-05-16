@@ -458,13 +458,18 @@ function splitTextElement(el,maxH,innerW){
     if(cls)m.className=cls;
     m.style.cssText='position:absolute;visibility:hidden;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%';
     document.body.appendChild(m);
+    // offsetHeight excludes margins; subtract the element's own margins so the
+    // piece + its margins still fits in maxH when rendered inside an .rd-page.
+    const cs=getComputedStyle(m);
+    const mt=parseFloat(cs.marginTop)||0,mb=parseFloat(cs.marginBottom)||0;
+    const effMaxH=Math.max(20,maxH-mt-mb);
     const pieces=[];let start=0;const len=text.length;
     while(start<len){
         let lo=1,hi=len-start,best=1;
         while(lo<=hi){
             const mid=(lo+hi)>>1;
             m.textContent=text.substr(start,mid);
-            if(m.offsetHeight<=maxH){best=mid;lo=mid+1}else{hi=mid-1}
+            if(m.offsetHeight<=effMaxH){best=mid;lo=mid+1}else{hi=mid-1}
         }
         const piece=document.createElement(tag);
         if(cls)piece.className=cls;
@@ -475,10 +480,20 @@ function splitTextElement(el,maxH,innerW){
     document.body.removeChild(m);
     return pieces.length?pieces:[el.outerHTML];
 }
+function _readerVisibleH(){
+    if(!readerContainer)return 0;
+    const wrapTop=readerContainer.getBoundingClientRect().top;
+    const navEl=document.querySelector('#readerPanel .r-nav');
+    if(!navEl)return readerContainer.clientHeight;
+    const visible=navEl.getBoundingClientRect().top-wrapTop;
+    // never exceed what flex layout reports — if visible is somehow larger
+    // (off-screen nav), fall back to clientHeight.
+    return Math.max(100,Math.min(readerContainer.clientHeight,visible));
+}
 const _INLINE_TAGS=new Set(['span','a','em','strong','b','i','u','sub','sup','small','code','br','img','ruby','rt','rp','q','cite','mark','time','abbr','kbd','samp','var','font','tt','s','del','ins']);
 function _hasBlockKids(el){for(const c of el.children)if(!_INLINE_TAGS.has(c.tagName.toLowerCase()))return true;return false}
 async function paginateChapter(html){
-    const w=readerContainer.clientWidth,h=readerContainer.clientHeight;
+    const w=readerContainer.clientWidth,h=_readerVisibleH();
     const padX=26,padY=14;
     const innerW=w-2*padX,innerH=h-2*padY;
     const measurer=document.createElement('div');
@@ -514,7 +529,7 @@ async function paginateChapter(html){
 }
 function renderPages(pages){
     if(!readerContainer||!readerContent)return;
-    const w=readerContainer.clientWidth,h=readerContainer.clientHeight;
+    const w=readerContainer.clientWidth,h=_readerVisibleH();
     readerContent.innerHTML='';
     pages.forEach(items=>{
         const pd=document.createElement('div');
