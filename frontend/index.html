@@ -460,12 +460,18 @@ function splitTextElement(el,maxH,innerW){
     if(!text.trim()||el.children.length>0)return [el.outerHTML];
     const tag=el.tagName.toLowerCase();
     const cls=el.className||'';
+    // wrap in a .reader-measurer so descendant-selector CSS (e.g.
+    // `.reader-measurer p{margin:0 0 .9em}`) actually matches m — otherwise
+    // getComputedStyle returns browser defaults (0) and the binary search
+    // packs piece.offsetHeight≈maxH, then the real .9em margin in .rd-page
+    // pushes the last line past the toolbar.
+    const wrap=document.createElement('div');
+    wrap.className='reader-measurer';
+    wrap.style.cssText='position:absolute;visibility:hidden;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%';
     const m=document.createElement(tag);
     if(cls)m.className=cls;
-    m.style.cssText='position:absolute;visibility:hidden;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%';
-    document.body.appendChild(m);
-    // offsetHeight excludes margins; subtract the element's own margins so the
-    // piece + its margins still fits in maxH when rendered inside an .rd-page.
+    wrap.appendChild(m);
+    document.body.appendChild(wrap);
     const cs=getComputedStyle(m);
     const mt=parseFloat(cs.marginTop)||0,mb=parseFloat(cs.marginBottom)||0;
     const effMaxH=Math.max(20,maxH-mt-mb);
@@ -483,7 +489,7 @@ function splitTextElement(el,maxH,innerW){
         pieces.push(piece.outerHTML);
         start+=best;
     }
-    document.body.removeChild(m);
+    document.body.removeChild(wrap);
     return pieces.length?pieces:[el.outerHTML];
 }
 function _readerVisibleH(){
