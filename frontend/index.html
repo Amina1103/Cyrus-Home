@@ -336,6 +336,7 @@ let currentBook=null,currentPageText='',selectedText='',currentChapter='';
 let commentTimer=null,commentMinutes=3,bookmarks=[];
 let bookSpine=[],currentChapterIdx=0,currentPageIdx=0,chapterPageCount=1;
 let readerContainer=null,readerContent=null,snapTimer=null,selectionTimer=null,readerFontPct=100;
+let _readerRO=null,_resizeTimer=null,_resizeLastH=0;
 function applyTheme(t){document.documentElement.dataset.theme=t;const btn=document.getElementById('themeToggle');if(btn)btn.textContent=t==='dark'?'☀':'☽';const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#1a1612':'#f5f0e8'}
 function toggleTheme(){const cur=document.documentElement.dataset.theme||'dark';const next=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',next)}catch(e){}applyTheme(next)}
 applyTheme(document.documentElement.dataset.theme||'dark');
@@ -431,6 +432,11 @@ async function openReader(bookId,title){
         readerContainer.addEventListener('touchend',onReaderTouchEnd,{passive:true});
         document.addEventListener('selectionchange',onReaderSelection);
         window.addEventListener('resize',onReaderResize);
+        _resizeLastH=readerContainer.clientHeight;
+        if(window.ResizeObserver){
+            _readerRO=new ResizeObserver(onReaderResize);
+            _readerRO.observe(readerContainer);
+        }
         let startC=0,startP=0;
         try{const pr=await fetch(`/api/reading/progress/${bookId}`);const d=await pr.json();const m=(d.cfi||'').match(/^c(\d+):p(\d+)$/);if(m){startC=parseInt(m[1]);startP=parseInt(m[2])}}catch(e){}
         await loadBookmarks();
@@ -509,12 +515,7 @@ async function _waitForReaderFonts(timeoutMs){
 }
 const _INLINE_TAGS=new Set(['span','a','em','strong','b','i','u','sub','sup','small','code','br','img','ruby','rt','rp','q','cite','mark','time','abbr','kbd','samp','var','font','tt','s','del','ins']);
 function _hasBlockKids(el){for(const c of el.children)if(!_INLINE_TAGS.has(c.tagName.toLowerCase()))return true;return false}
-async function paginateChapter(html){
-    // wait for Zhuque Fangsong before measuring — otherwise the measurer uses
-    // the fallback font's narrower glyphs, and after the swap actual paragraphs
-    // wrap to more lines than packed → last line spills past the page.
-    await _waitForReaderFonts(3000);
-    const w=readerContainer.clientWidth,h=_readerVisibleH();
+async function paginateChapter(html,w,h){
     const padX=26,padY=14;
     const innerW=w-2*padX,innerH=h-2*padY;
     _dbgWrite('P','w='+w+' h='+h+' innerH='+innerH+' fontPct='+readerFontPct+' fontsStatus='+((document.fonts&&document.fonts.status)||'?'));
@@ -549,9 +550,8 @@ async function paginateChapter(html){
     document.body.removeChild(measurer);
     return pages.length?pages:[['']];
 }
-function renderPages(pages){
+function renderPages(pages,w,h){
     if(!readerContainer||!readerContent)return;
-    const w=readerContainer.clientWidth,h=_readerVisibleH();
     _dbgWrite('R','w='+w+' h='+h+' pages='+pages.length);
     readerContent.innerHTML='';
     pages.forEach(items=>{
@@ -574,11 +574,16 @@ async function loadChapter(idx,targetPage){
         const r=await fetch(`/api/reading/v2/chapter/${currentBook}/${idx}`);
         const d=await r.json();
         if(d.error)throw new Error(d.error);
-        const pages=await paginateChapter(d.html||'');
-        renderPages(pages);
+        // 等字体加载稳定，然后一次性测量 w/h，paginate 和 render 必须用同一组数。
+        // 否则两次 _readerVisibleH 之间的布局抖动（iOS 地址栏 / debug 条 / 字体回流）
+        // 会让分页按 h1 排版、渲染按 h2 设盒子高度，h1 > h2 时溢出 = 最后一行被工具栏挡。
+        await _waitForReaderFonts(3000);
+        const w=readerContainer.clientWidth, h=_readerVisibleH();
+        const pages=await paginateChapter(d.html||'', w, h);
+        renderPages(pages, w, h);
         const p=Math.max(0,Math.min(targetPage||0,chapterPageCount-1));
         currentPageIdx=p;
-        readerContainer.scrollLeft=p*readerContainer.clientWidth;
+        readerContainer.scrollLeft=p*w;
         afterPageChange();
     }catch(e){readerContent.innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">章节加载失败: '+escapeHtml(e.message||String(e))+'</div>'}
 }
@@ -646,9 +651,13 @@ function onReaderSelection(){
     },250);
 }
 function onReaderResize(){
-    if(!readerContent||!bookSpine.length)return;
-    const savedPage=currentPageIdx;
-    loadChapter(currentChapterIdx,savedPage);
+    if(!readerContent||!bookSpine.length||!readerContainer)return;
+    const ch=readerContainer.clientHeight;
+    // 过滤小抖动（debug 条文本切换、字体回流的亚像素差），只在变化≥5px 才重排
+    if(Math.abs(ch-_resizeLastH)<5)return;
+    _resizeLastH=ch;
+    if(_resizeTimer)clearTimeout(_resizeTimer);
+    _resizeTimer=setTimeout(()=>{loadChapter(currentChapterIdx,currentPageIdx)},200);
 }
 function _fireReadingClose(bid){
     if(!bid)return;
@@ -661,6 +670,8 @@ function _fireReadingClose(bid){
 function closeReader(){
     stopAutoComment();
     _fireReadingClose(currentBook);
+    if(_readerRO){try{_readerRO.disconnect()}catch(e){}_readerRO=null}
+    if(_resizeTimer){clearTimeout(_resizeTimer);_resizeTimer=null}
     if(readerContainer){readerContainer.removeEventListener('scroll',onReaderScroll);readerContainer.removeEventListener('touchstart',onReaderTouchStart);readerContainer.removeEventListener('touchend',onReaderTouchEnd);readerContainer.innerHTML=''}
     document.removeEventListener('selectionchange',onReaderSelection);
     window.removeEventListener('resize',onReaderResize);
