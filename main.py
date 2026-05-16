@@ -2982,13 +2982,10 @@ async def icon_192(): return FileResponse("frontend/icon-192.png", media_type="i
 @app.get("/icon-512.png")
 async def icon_512(): return FileResponse("frontend/icon-512.png", media_type="image/png")
 
-@app.get("/fonts/{name}")
-async def reader_font(name: str):
-    if "/" in name or "\\" in name or ".." in name:
-        return JSONResponse({"error": "bad name"}, 400)
-    fp = os.path.join("frontend", "fonts", name)
-    if not os.path.isfile(fp):
-        return JSONResponse({"error": "not found"}, 404)
-    ext = os.path.splitext(name)[1].lower()
-    mt = {".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf"}.get(ext, "application/octet-stream")
-    return FileResponse(fp, media_type=mt, headers={"Cache-Control": "public, max-age=2592000, immutable"})
+@app.get("/ZhuqueFangsong-Regular.ttf")
+async def zhuque_font():
+    return FileResponse(
+        "frontend/ZhuqueFangsong-Regular.ttf",
+        media_type="font/ttf",
+        headers={"Cache-Control": "public, max-age=2592000, immutable"},
+    )
