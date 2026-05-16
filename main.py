@@ -2906,13 +2906,29 @@ async def reading_chapter_v2(bid: str, idx: int):
         body = re.sub(r'(<img[^>]+src=)"([^"]+)"', lambda mm: mm.group(1) + '"' + fix_url(mm.group(2)) + '"', body)
         body = re.sub(r"(<img[^>]+src=)'([^']+)'", lambda mm: mm.group(1) + "'" + fix_url(mm.group(2)) + "'", body)
         body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL | re.IGNORECASE)
-        # 把注释/上标图标（<a><img alt="注"></a> 或裸 <img alt="①">）替换成小 sup 标记，
-        # 避免缺图时 alt 渲染成页面中间大水印
+        # 注释图标处理（顺序很重要：先匹配 a>img 包裹，再匹配裸 img）
+        # 1) 任何 <a>...<img>...</a> 包裹结构都视为脚注链接（EPUB 里几乎全是），替换成小 sup
+        def _wrap_marker(mm):
+            inner = mm.group(0)
+            alt_m = re.search(r'\balt=["\']([^"\']{1,4})["\']', inner)
+            label = alt_m.group(1) if alt_m else '注'
+            return f'<sup class="ann">[{label}]</sup>'
         body = re.sub(
-            r'<a[^>]*>\s*<img[^>]*\balt=["\']([^"\']{1,4})["\'][^>]*/?>\s*</a>',
-            lambda mm: f'<sup class="ann">[{mm.group(1)}]</sup>',
+            r'<a[^>]*>\s*<img[^>]*/?>\s*</a>',
+            _wrap_marker, body, flags=re.IGNORECASE
+        )
+        # 2) 裸 <img> 含 note/footnote/annotation 类名或 src
+        body = re.sub(
+            r'<img[^>]*\bclass=["\'][^"\']*(?:note|footnote|annotation|zhushi|ann\b|fn[-_])[^"\']*["\'][^>]*/?>',
+            '<sup class="ann">[注]</sup>',
             body, flags=re.IGNORECASE
         )
+        body = re.sub(
+            r'<img[^>]*\bsrc=["\'][^"\']*(?:note|footnote|annot|fn[-_]|zhushi)[^"\']*["\'][^>]*/?>',
+            '<sup class="ann">[注]</sup>',
+            body, flags=re.IGNORECASE
+        )
+        # 3) 短 alt 的裸 img（① ② 注 等）
         body = re.sub(
             r'<img[^>]*\balt=["\']([^"\']{1,4})["\'][^>]*/?>',
             lambda mm: f'<sup class="ann">[{mm.group(1)}]</sup>',

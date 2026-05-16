@@ -107,21 +107,23 @@
         .welcome{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}#fileInput,#bookUpload{display:none}
         .r-header{padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);display:flex;align-items:center;gap:8px;flex-shrink:0}.r-header .r-title{flex:1;font-size:15px;color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.r-header .r-btn{background:none;border:none;color:var(--gold-m);font-size:16px;cursor:pointer;padding:4px 6px}.bm-dot{background:none;border:none;font-size:14px;cursor:pointer;padding:2px 6px;color:var(--dim);opacity:.5;transition:.2s}.bm-dot.marked{opacity:1;color:var(--warm)}
         .bookshelf{flex:1;overflow-y:auto;padding:20px 16px}.bookshelf-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px}.book-grid{display:flex;flex-direction:column;gap:12px}.book-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer}.book-icon{width:40px;height:52px;background:linear-gradient(135deg,var(--warm),var(--rust));border-radius:4px 8px 8px 4px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:rgba(255,255,255,.8)}.book-info{flex:1;overflow:hidden}.book-info .btitle{font-size:15px;color:var(--cream);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.book-info .btime{font-size:11px;color:var(--dim)}.book-del{color:var(--dim);background:none;border:none;font-size:16px;cursor:pointer;padding:8px}.upload-btn{width:100%;padding:14px;background:var(--bg2);border:1px dashed rgba(232,200,122,.2);border-radius:12px;color:var(--gold-m);font-size:14px;cursor:pointer;text-align:center;font-family:'Noto Serif SC',serif;margin-bottom:16px}
-        #readerWrap{flex:1;overflow-x:auto;overflow-y:hidden;position:relative;background:var(--bg);min-height:300px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        #readerWrap{flex:1;overflow-x:auto;overflow-y:hidden;position:relative;background:var(--bg);min-height:300px;-webkit-overflow-scrolling:touch;scrollbar-width:none;scroll-snap-type:x mandatory}
         #readerWrap::-webkit-scrollbar{display:none}
-        .reader-content{column-fill:auto;font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans SC",sans-serif;color:var(--cream);line-height:1.95;letter-spacing:.3px;font-size:17px;-webkit-touch-callout:default;user-select:text;-webkit-user-select:text;box-sizing:border-box;word-break:break-word;overflow-wrap:anywhere}
-        .reader-content p{margin:0 0 .9em;text-align:justify;text-indent:2em}
-        .reader-content h1,.reader-content h2,.reader-content h3,.reader-content h4{color:var(--gold);font-weight:600;margin:1em 0 .6em;text-indent:0}
-        .reader-content img{max-width:100%;max-height:60vh;height:auto;display:inline-block;vertical-align:middle;margin:.4em 0}
-        .reader-content figure,.reader-content .image,.reader-content center{text-align:center;margin:.8em 0}
-        .reader-content figure img,.reader-content .image img,.reader-content center img{display:block;margin:.4em auto}
-        .reader-content a{color:var(--gold)}
-        .reader-content blockquote{border-left:2px solid var(--gold-m);padding-left:12px;margin:.8em 0;color:var(--dim)}
-        .reader-content rt{font-size:.5em;color:var(--dim);font-weight:normal}
-        .reader-content rp{display:none}
-        .reader-content ruby{ruby-position:over}
-        .reader-content sup.ann{font-size:.6em;color:var(--gold-m);vertical-align:super;margin:0 1px;font-style:normal}
-        .reader-content sup{font-size:.65em;vertical-align:super}
+        .reader-content{display:flex;flex-direction:row;height:100%}
+        .rd-page,.reader-measurer{font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans SC",sans-serif;color:var(--cream);line-height:1.95;letter-spacing:.3px;font-size:17px;-webkit-touch-callout:default;user-select:text;-webkit-user-select:text;word-break:break-word;overflow-wrap:anywhere}
+        .rd-page{flex-shrink:0;box-sizing:border-box;overflow:hidden;scroll-snap-align:start;scroll-snap-stop:always;padding:14px 26px}
+        .rd-page p,.reader-measurer p{margin:0 0 .9em;text-align:justify;text-indent:2em}
+        .rd-page h1,.rd-page h2,.rd-page h3,.rd-page h4,.reader-measurer h1,.reader-measurer h2,.reader-measurer h3,.reader-measurer h4{color:var(--gold);font-weight:600;margin:1em 0 .6em;text-indent:0}
+        .rd-page img,.reader-measurer img{max-width:100%;max-height:55vh;height:auto;display:inline-block;vertical-align:middle;margin:.4em 0}
+        .rd-page figure,.rd-page .image,.rd-page center,.reader-measurer figure,.reader-measurer .image,.reader-measurer center{text-align:center;margin:.8em 0}
+        .rd-page figure img,.rd-page .image img,.rd-page center img,.reader-measurer figure img,.reader-measurer .image img,.reader-measurer center img{display:block;margin:.4em auto}
+        .rd-page a,.reader-measurer a{color:var(--gold)}
+        .rd-page blockquote,.reader-measurer blockquote{border-left:2px solid var(--gold-m);padding-left:12px;margin:.8em 0;color:var(--dim)}
+        .rd-page rt,.reader-measurer rt{font-size:.5em;color:var(--dim);font-weight:normal}
+        .rd-page rp,.reader-measurer rp{display:none}
+        .rd-page ruby,.reader-measurer ruby{ruby-position:over}
+        .rd-page sup.ann,.reader-measurer sup.ann{font-size:.6em;color:var(--gold-m);vertical-align:super;margin:0 1px;font-style:normal}
+        .rd-page sup,.reader-measurer sup{font-size:.65em;vertical-align:super}
         .r-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid rgba(232,200,122,.06);flex-shrink:0}.r-nav button{background:none;border:none;color:var(--gold-m);font-size:20px;cursor:pointer;padding:8px 12px}.r-nav .page-info{font-size:12px;color:var(--dim)}
         .r-settings{position:absolute;top:50px;right:16px;background:var(--bg2);border:1px solid rgba(232,200,122,.1);border-radius:12px;padding:16px;z-index:20;display:none;min-width:200px}.r-settings.show{display:block}.r-settings .s-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:var(--cream)}.r-settings .s-row:last-child{margin-bottom:0}.r-settings select{background:var(--bg3);color:var(--cream);border:1px solid var(--dim);border-radius:6px;padding:4px 8px;font-size:12px;outline:none;font-family:'Noto Serif SC',serif}
         .drawer-overlay{position:fixed;inset:0;background:var(--bg);z-index:25;display:none;flex-direction:column;padding-top:max(50px,env(safe-area-inset-top))}.drawer-overlay.show{display:flex}.drawer-header{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(232,200,122,.1);gap:4px}.drawer-tab{background:none;border:none;color:var(--dim);font-size:15px;cursor:pointer;padding:6px 14px;border-bottom:2px solid transparent;font-family:'Noto Serif SC',serif}.drawer-tab.active{color:var(--gold);border-bottom-color:var(--gold)}.drawer-close{margin-left:auto;background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:4px 8px}.drawer-body{flex:1;overflow-y:auto;padding:8px 16px;-webkit-overflow-scrolling:touch}.drawer-body::-webkit-scrollbar{display:none}.toc-item{padding:14px 0;border-bottom:1px solid rgba(232,200,122,.04);color:var(--cream);font-size:14px;cursor:pointer;line-height:1.5}.toc-item:active{color:var(--gold)}.toc-item.sub{padding-left:20px;font-size:13px;color:var(--dim)}
@@ -419,6 +421,8 @@ async function openReader(bookId,title){
         $('readerWrap').innerHTML='<div class="reader-content" id="readerContent"></div>';
         readerContainer=$('readerWrap');readerContent=$('readerContent');
         readerContainer.addEventListener('scroll',onReaderScroll,{passive:true});
+        readerContainer.addEventListener('touchstart',onReaderTouchStart,{passive:true});
+        readerContainer.addEventListener('touchend',onReaderTouchEnd,{passive:true});
         document.addEventListener('selectionchange',onReaderSelection);
         window.addEventListener('resize',onReaderResize);
         let startC=0,startP=0;
@@ -430,42 +434,102 @@ async function openReader(bookId,title){
         try{await fetch('/api/reading/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId})})}catch(e){}
     }catch(e){$('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">加载失败: '+escapeHtml(e.message||String(e))+'</div>'}
 }
-function applyColumnLayout(){
-    if(!readerContainer||!readerContent)return;
-    const w=readerContainer.clientWidth,h=readerContainer.clientHeight,pad=24;
-    readerContent.style.columnWidth=(w-2*pad)+'px';
-    readerContent.style.columnGap=(2*pad)+'px';
-    readerContent.style.paddingLeft=pad+'px';
-    readerContent.style.paddingRight=pad+'px';
-    readerContent.style.paddingTop='12px';
-    readerContent.style.paddingBottom='12px';
-    readerContent.style.height=h+'px';
-    readerContent.style.fontSize=readerFontPct+'%';
+function waitForImages(container,timeoutMs){
+    const imgs=Array.from(container.querySelectorAll('img'));
+    if(!imgs.length)return Promise.resolve();
+    imgs.forEach(im=>im.removeAttribute('loading'));
+    return Promise.race([
+        Promise.all(imgs.map(im=>im.complete?Promise.resolve():new Promise(rs=>{const t=setTimeout(rs,1500);im.onload=im.onerror=()=>{clearTimeout(t);rs()}}))),
+        new Promise(rs=>setTimeout(rs,timeoutMs||2000))
+    ]);
 }
-function recalcPageCount(){
-    if(!readerContainer||!readerContent){chapterPageCount=1;return}
-    const w=readerContainer.clientWidth;
-    const sw=readerContent.scrollWidth||readerContainer.scrollWidth||w;
-    chapterPageCount=Math.max(1,Math.round(sw/w));
+function splitTextElement(el,maxH,innerW){
+    const text=el.textContent||'';
+    if(!text.trim()||el.children.length>0)return [el.outerHTML];
+    const tag=el.tagName.toLowerCase();
+    const cls=el.className||'';
+    const m=document.createElement(tag);
+    if(cls)m.className=cls;
+    m.style.cssText='position:absolute;visibility:hidden;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%';
+    document.body.appendChild(m);
+    const pieces=[];let start=0;const len=text.length;
+    while(start<len){
+        let lo=1,hi=len-start,best=1;
+        while(lo<=hi){
+            const mid=(lo+hi)>>1;
+            m.textContent=text.substr(start,mid);
+            if(m.offsetHeight<=maxH){best=mid;lo=mid+1}else{hi=mid-1}
+        }
+        const piece=document.createElement(tag);
+        if(cls)piece.className=cls;
+        piece.textContent=text.substr(start,best);
+        pieces.push(piece.outerHTML);
+        start+=best;
+    }
+    document.body.removeChild(m);
+    return pieces.length?pieces:[el.outerHTML];
+}
+async function paginateChapter(html){
+    const w=readerContainer.clientWidth,h=readerContainer.clientHeight;
+    const padX=26,padY=14;
+    const innerW=w-2*padX,innerH=h-2*padY;
+    const measurer=document.createElement('div');
+    measurer.className='reader-measurer';
+    measurer.style.cssText='position:absolute;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%;visibility:hidden';
+    measurer.innerHTML=html||'';
+    document.body.appendChild(measurer);
+    await waitForImages(measurer,1800);
+    void measurer.offsetHeight;
+    const pages=[];let buf=[],bufH=0;
+    const children=Array.from(measurer.children);
+    for(const ch of children){
+        const cs=getComputedStyle(ch);
+        const mt=parseFloat(cs.marginTop)||0,mb=parseFloat(cs.marginBottom)||0;
+        const ih=ch.getBoundingClientRect().height+mt+mb;
+        if(ih<=innerH){
+            if(bufH+ih>innerH&&buf.length){pages.push(buf);buf=[];bufH=0}
+            buf.push(ch.outerHTML);bufH+=ih;
+        }else{
+            if(buf.length){pages.push(buf);buf=[];bufH=0}
+            const splits=splitTextElement(ch,innerH,innerW);
+            for(const s of splits)pages.push([s]);
+        }
+    }
+    if(buf.length)pages.push(buf);
+    document.body.removeChild(measurer);
+    return pages.length?pages:[['']];
+}
+function renderPages(pages){
+    if(!readerContainer||!readerContent)return;
+    const w=readerContainer.clientWidth,h=readerContainer.clientHeight;
+    readerContent.innerHTML='';
+    pages.forEach(items=>{
+        const pd=document.createElement('div');
+        pd.className='rd-page';
+        pd.style.width=w+'px';
+        pd.style.height=h+'px';
+        pd.style.fontSize=readerFontPct+'%';
+        pd.innerHTML=items.join('');
+        readerContent.appendChild(pd);
+    });
+    chapterPageCount=pages.length;
 }
 async function loadChapter(idx,targetPage){
     if(idx<0||idx>=bookSpine.length)return;
     currentChapterIdx=idx;
     currentChapter=(bookSpine[idx]&&bookSpine[idx].title)||('第 '+(idx+1)+' 节');
+    readerContent.innerHTML='<div style="padding:40px;color:var(--dim);text-align:center">正在排版...</div>';
     try{
         const r=await fetch(`/api/reading/v2/chapter/${currentBook}/${idx}`);
         const d=await r.json();
         if(d.error)throw new Error(d.error);
-        readerContent.innerHTML=d.html||'';
-        applyColumnLayout();
-        await new Promise(rs=>requestAnimationFrame(rs));
-        await new Promise(rs=>requestAnimationFrame(rs));
-        recalcPageCount();
+        const pages=await paginateChapter(d.html||'');
+        renderPages(pages);
         const p=Math.max(0,Math.min(targetPage||0,chapterPageCount-1));
         currentPageIdx=p;
         readerContainer.scrollLeft=p*readerContainer.clientWidth;
-        afterPageChange(true);
-    }catch(e){readerContent.innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">章节加载失败</div>'}
+        afterPageChange();
+    }catch(e){readerContent.innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">章节加载失败: '+escapeHtml(e.message||String(e))+'</div>'}
 }
 function afterPageChange(skipScroll){
     updatePageInfo();
@@ -478,24 +542,11 @@ function updatePageInfo(){
     $('pageInfo').textContent=(currentPageIdx+1)+' / '+chapterPageCount+' · '+(currentChapterIdx+1)+'/'+bookSpine.length;
 }
 function extractCurrentPageText(){
-    if(!readerContent||!readerContainer){currentPageText='';return}
-    const w=readerContainer.clientWidth;
-    const startX=currentPageIdx*w,endX=startX+w;
-    const contentRect=readerContent.getBoundingClientRect();
-    const scrollLeft=readerContainer.scrollLeft;
-    const walker=document.createTreeWalker(readerContent,NodeFilter.SHOW_TEXT);
-    const buf=[];let n;
-    while(n=walker.nextNode()){
-        const t=(n.textContent||'').trim();
-        if(!t)continue;
-        try{
-            const r=document.createRange();r.selectNode(n);
-            const rect=r.getBoundingClientRect();
-            const relX=rect.left-contentRect.left+scrollLeft;
-            if(relX>=startX-10&&relX<endX-5)buf.push(t);
-        }catch(e){}
-    }
-    currentPageText=buf.join(' ').replace(/\s+/g,' ').trim();
+    if(!readerContent){currentPageText='';return}
+    const pages=readerContent.querySelectorAll('.rd-page');
+    if(currentPageIdx<pages.length){
+        currentPageText=(pages[currentPageIdx].innerText||'').replace(/\s+/g,' ').trim();
+    }else{currentPageText=''}
 }
 function saveProgress(){
     if(!currentBook)return;
@@ -507,12 +558,27 @@ function onReaderScroll(){
     snapTimer=setTimeout(()=>{
         if(!readerContainer)return;
         const w=readerContainer.clientWidth;
-        const cur=readerContainer.scrollLeft;
-        const target=Math.round(cur/w)*w;
-        if(Math.abs(target-cur)>1)readerContainer.scrollLeft=target;
-        currentPageIdx=Math.round(target/w);
+        currentPageIdx=Math.round(readerContainer.scrollLeft/w);
         afterPageChange();
-    },110);
+    },80);
+}
+let _touchStartX=0,_touchStartT=0,_touchEdge=null;
+function onReaderTouchStart(e){
+    if(!e.touches||e.touches.length!==1||!readerContainer)return;
+    _touchStartX=e.touches[0].clientX;_touchStartT=Date.now();
+    const cur=readerContainer.scrollLeft;
+    const maxSc=Math.max(0,(readerContent?readerContent.scrollWidth:0)-readerContainer.clientWidth);
+    const atStart=cur<2,atEnd=cur>=maxSc-2;
+    _touchEdge=(atStart&&atEnd)?'both':(atStart?'start':(atEnd?'end':null));
+}
+function onReaderTouchEnd(e){
+    if(!_touchEdge||!e.changedTouches||e.changedTouches.length!==1)return;
+    const dx=_touchStartX-e.changedTouches[0].clientX;
+    const dt=Date.now()-_touchStartT;
+    const edge=_touchEdge;_touchEdge=null;
+    if(dt>700||Math.abs(dx)<50)return;
+    if(dx>0&&(edge==='end'||edge==='both')&&currentChapterIdx<bookSpine.length-1){loadChapter(currentChapterIdx+1,0)}
+    else if(dx<0&&(edge==='start'||edge==='both')&&currentChapterIdx>0){loadChapter(currentChapterIdx-1,999)}
 }
 function onReaderSelection(){
     if(selectionTimer)clearTimeout(selectionTimer);
@@ -529,21 +595,14 @@ function onReaderSelection(){
     },250);
 }
 function onReaderResize(){
-    if(!readerContent)return;
+    if(!readerContent||!bookSpine.length)return;
     const savedPage=currentPageIdx;
-    applyColumnLayout();
-    requestAnimationFrame(()=>{
-        recalcPageCount();
-        const p=Math.min(savedPage,chapterPageCount-1);
-        currentPageIdx=p;
-        readerContainer.scrollLeft=p*readerContainer.clientWidth;
-        afterPageChange();
-    });
+    loadChapter(currentChapterIdx,savedPage);
 }
 function closeReader(){
     stopAutoComment();
     if(currentBook)fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook})}).catch(()=>{});
-    if(readerContainer){readerContainer.removeEventListener('scroll',onReaderScroll);readerContainer.innerHTML=''}
+    if(readerContainer){readerContainer.removeEventListener('scroll',onReaderScroll);readerContainer.removeEventListener('touchstart',onReaderTouchStart);readerContainer.removeEventListener('touchend',onReaderTouchEnd);readerContainer.innerHTML=''}
     document.removeEventListener('selectionchange',onReaderSelection);
     window.removeEventListener('resize',onReaderResize);
     currentBook=null;currentPageText='';currentChapter='';
@@ -618,7 +677,7 @@ function nextPage(){
 }
 function toggleSettings(){var s=$('readerSettings');if(s.classList.contains('show')){s.classList.remove('show')}else{s.classList.add('show');setTimeout(()=>document.addEventListener('click',function h(e){if(!s.contains(e.target)){s.classList.remove('show');document.removeEventListener('click',h)}},0))}}
 function updateInterval(v){commentMinutes=parseInt(v);if(commentMinutes>0)startAutoComment();else stopAutoComment()}
-function updateFontSize(v){readerFontPct=parseInt(v)||100;if(!readerContent)return;const savedPage=currentPageIdx;applyColumnLayout();requestAnimationFrame(()=>{recalcPageCount();const p=Math.min(savedPage,chapterPageCount-1);currentPageIdx=p;readerContainer.scrollLeft=p*readerContainer.clientWidth;afterPageChange()})}
+function updateFontSize(v){readerFontPct=parseInt(v)||100;if(!readerContent||!bookSpine.length)return;loadChapter(currentChapterIdx,currentPageIdx)}
 function startAutoComment(){stopAutoComment();if(commentMinutes<=0||!currentBook)return;commentTimer=setInterval(()=>{if(currentPageText)requestComment(currentPageText)},commentMinutes*60*1000)}
 function stopAutoComment(){if(commentTimer){clearInterval(commentTimer);commentTimer=null}}
 function loadToc(){const el=$('tocBody');el.innerHTML='';if(!bookSpine.length){el.innerHTML='<div style="color:var(--dim);padding:20px;text-align:center">此书无目录</div>';return}bookSpine.forEach((ch,i)=>{const d=document.createElement('div');d.className='toc-item';d.textContent=ch.title||('第 '+(i+1)+' 节');d.onclick=()=>{loadChapter(i,0);closeDrawer()};el.appendChild(d)})}
