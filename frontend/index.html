@@ -339,7 +339,12 @@ function applyTheme(t){document.documentElement.dataset.theme=t;const btn=docume
 function toggleTheme(){const cur=document.documentElement.dataset.theme||'dark';const next=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',next)}catch(e){}applyTheme(next)}
 applyTheme(document.documentElement.dataset.theme||'dark');
 const $=id=>document.getElementById(id);
-function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(n+'View').classList.add('active');if(n==='chat'){updateModelPill();if(!currentSessionId)initChat()}if(n==='reading')loadBookshelf();if(n==='day')showDayView();if(n==='feed')showFeedView()}
+function showView(n){
+    if(currentBook&&n!=='reading'){try{closeReader()}catch(e){}}
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(n+'View').classList.add('active');
+    if(n==='chat'){updateModelPill();if(!currentSessionId)initChat()}if(n==='reading')loadBookshelf();if(n==='day')showDayView();if(n==='feed')showFeedView()
+}
+window.addEventListener('pagehide',()=>{if(currentBook)_fireReadingClose(currentBook)});
 function showToast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),1500)}
 (function(){const c=$('homeBg'),cols=['#e8c87a','#d4956a','#c07040','#a08450','#8a7e6e'];for(let i=0;i<12;i++){const l=document.createElement('div');l.className='leaf';l.style.left=Math.random()*100+'%';l.style.background=cols[Math.floor(Math.random()*cols.length)];l.style.animationDuration=(10+Math.random()*15)+'s';l.style.animationDelay=Math.random()*12+'s';const s=5+Math.random()*7;l.style.width=s+'px';l.style.height=s+'px';c.appendChild(l)}})();
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
@@ -469,6 +474,8 @@ function splitTextElement(el,maxH,innerW){
     document.body.removeChild(m);
     return pieces.length?pieces:[el.outerHTML];
 }
+const _INLINE_TAGS=new Set(['span','a','em','strong','b','i','u','sub','sup','small','code','br','img','ruby','rt','rp','q','cite','mark','time','abbr','kbd','samp','var','font','tt','s','del','ins']);
+function _hasBlockKids(el){for(const c of el.children)if(!_INLINE_TAGS.has(c.tagName.toLowerCase()))return true;return false}
 async function paginateChapter(html){
     const w=readerContainer.clientWidth,h=readerContainer.clientHeight;
     const padX=26,padY=14;
@@ -481,21 +488,26 @@ async function paginateChapter(html){
     await waitForImages(measurer,1800);
     void measurer.offsetHeight;
     const pages=[];let buf=[],bufH=0;
-    const children=Array.from(measurer.children);
-    for(const ch of children){
-        const cs=getComputedStyle(ch);
+    const flush=()=>{if(buf.length){pages.push(buf);buf=[];bufH=0}};
+    function process(el){
+        const cs=getComputedStyle(el);
         const mt=parseFloat(cs.marginTop)||0,mb=parseFloat(cs.marginBottom)||0;
-        const ih=ch.getBoundingClientRect().height+mt+mb;
+        const ih=el.getBoundingClientRect().height+mt+mb;
         if(ih<=innerH){
-            if(bufH+ih>innerH&&buf.length){pages.push(buf);buf=[];bufH=0}
-            buf.push(ch.outerHTML);bufH+=ih;
+            if(bufH+ih>innerH&&buf.length)flush();
+            buf.push(el.outerHTML);bufH+=ih;
+        }else if(el.children.length>0&&_hasBlockKids(el)){
+            // wrapper div is too tall — descend into its block children
+            for(const ch of Array.from(el.children))process(ch);
         }else{
-            if(buf.length){pages.push(buf);buf=[];bufH=0}
-            const splits=splitTextElement(ch,innerH,innerW);
+            // genuine text leaf that's too tall — split by chars
+            flush();
+            const splits=splitTextElement(el,innerH,innerW);
             for(const s of splits)pages.push([s]);
         }
     }
-    if(buf.length)pages.push(buf);
+    for(const ch of Array.from(measurer.children))process(ch);
+    flush();
     document.body.removeChild(measurer);
     return pages.length?pages:[['']];
 }
@@ -599,9 +611,17 @@ function onReaderResize(){
     const savedPage=currentPageIdx;
     loadChapter(currentChapterIdx,savedPage);
 }
+function _fireReadingClose(bid){
+    if(!bid)return;
+    try{
+        const blob=new Blob([JSON.stringify({book_id:bid})],{type:'application/json'});
+        if(navigator.sendBeacon&&navigator.sendBeacon('/api/reading/close',blob))return;
+    }catch(e){}
+    try{fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bid}),keepalive:true}).catch(()=>{})}catch(e){}
+}
 function closeReader(){
     stopAutoComment();
-    if(currentBook)fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook})}).catch(()=>{});
+    _fireReadingClose(currentBook);
     if(readerContainer){readerContainer.removeEventListener('scroll',onReaderScroll);readerContainer.removeEventListener('touchstart',onReaderTouchStart);readerContainer.removeEventListener('touchend',onReaderTouchEnd);readerContainer.innerHTML=''}
     document.removeEventListener('selectionchange',onReaderSelection);
     window.removeEventListener('resize',onReaderResize);
