@@ -1254,7 +1254,7 @@ async def feed_list(page: int = 1, limit: int = 20):
     offset = (page - 1) * limit
     c = get_db()
     rows = c.execute(
-        "SELECT * FROM feed WHERE type != 'status' ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        "SELECT * FROM feed WHERE type NOT IN ('status','app') ORDER BY created_at DESC LIMIT ? OFFSET ?",
         (limit, offset)
     ).fetchall()
     c.close()
