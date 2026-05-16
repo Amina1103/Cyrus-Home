@@ -667,6 +667,10 @@ def get_recent_feed(hours=6):
     status_row = c.execute(
         "SELECT content FROM feed WHERE type='status' ORDER BY created_at DESC LIMIT 1"
     ).fetchone()
+    status_history = c.execute(
+        "SELECT content, created_at FROM feed WHERE type='status' AND created_at >= ? ORDER BY created_at ASC",
+        (cutoff,)
+    ).fetchall()
     c.close()
     bj = timezone(timedelta(hours=8))
     current_status = status_row["content"] if status_row else ""
@@ -679,6 +683,10 @@ def get_recent_feed(hours=6):
     lines = []
     if current_status:
         lines.append(f"Amina 当前状态：{current_status}")
+    if len(status_history) >= 2:
+        lines.append("状态变更记录：")
+        for sh in status_history:
+            lines.append(f"  {_fmt_ts(sh['created_at'])} → {sh['content']}")
     if rows:
         if current_status: lines.append("")
         lines.append("最近的动态：")
