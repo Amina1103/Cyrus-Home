@@ -482,20 +482,40 @@ function splitTextElement(el,maxH,innerW){
 }
 function _readerVisibleH(){
     if(!readerContainer)return 0;
-    const wrapTop=readerContainer.getBoundingClientRect().top;
+    const wrapRect=readerContainer.getBoundingClientRect();
+    const cH=readerContainer.clientHeight;
     const navEl=document.querySelector('#readerPanel .r-nav');
-    if(!navEl)return readerContainer.clientHeight;
-    const visible=navEl.getBoundingClientRect().top-wrapTop;
-    // never exceed what flex layout reports — if visible is somehow larger
-    // (off-screen nav), fall back to clientHeight.
-    return Math.max(100,Math.min(readerContainer.clientHeight,visible));
+    if(!navEl){console.log('[reader H] no navEl, fallback clientH=',cH);return cH}
+    const navRect=navEl.getBoundingClientRect();
+    const visible=navRect.top-wrapRect.top;
+    const result=Math.max(100,Math.min(cH,visible));
+    console.log('[reader H] wrapTop=',wrapRect.top.toFixed(1),'wrapBottom=',wrapRect.bottom.toFixed(1),'clientH=',cH,'navTop=',navRect.top.toFixed(1),'navH=',navRect.height.toFixed(1),'visible=',visible.toFixed(1),'→ h=',result.toFixed(1),'vh=',innerHeight);
+    return result;
+}
+async function _waitForReaderFonts(timeoutMs){
+    if(!document.fonts||!document.fonts.load)return;
+    const px=Math.max(8,Math.round(17*readerFontPct/100));
+    try{
+        await Promise.race([
+            Promise.all([
+                document.fonts.load(px+'px "Zhuque Fangsong"'),
+                document.fonts.ready,
+            ]),
+            new Promise(rs=>setTimeout(rs,timeoutMs||3000)),
+        ]);
+    }catch(e){}
 }
 const _INLINE_TAGS=new Set(['span','a','em','strong','b','i','u','sub','sup','small','code','br','img','ruby','rt','rp','q','cite','mark','time','abbr','kbd','samp','var','font','tt','s','del','ins']);
 function _hasBlockKids(el){for(const c of el.children)if(!_INLINE_TAGS.has(c.tagName.toLowerCase()))return true;return false}
 async function paginateChapter(html){
+    // wait for Zhuque Fangsong before measuring — otherwise the measurer uses
+    // the fallback font's narrower glyphs, and after the swap actual paragraphs
+    // wrap to more lines than packed → last line spills past the page.
+    await _waitForReaderFonts(3000);
     const w=readerContainer.clientWidth,h=_readerVisibleH();
     const padX=26,padY=14;
     const innerW=w-2*padX,innerH=h-2*padY;
+    console.log('[reader paginate] w=',w,'h=',h,'innerH=',innerH,'fontPct=',readerFontPct,'fontsReady=',!!(document.fonts&&document.fonts.status==='loaded'));
     const measurer=document.createElement('div');
     measurer.className='reader-measurer';
     measurer.style.cssText='position:absolute;left:-9999px;top:0;width:'+innerW+'px;font-size:'+readerFontPct+'%;visibility:hidden';
@@ -530,6 +550,7 @@ async function paginateChapter(html){
 function renderPages(pages){
     if(!readerContainer||!readerContent)return;
     const w=readerContainer.clientWidth,h=_readerVisibleH();
+    console.log('[reader render] w=',w,'h=',h,'pages=',pages.length);
     readerContent.innerHTML='';
     pages.forEach(items=>{
         const pd=document.createElement('div');
