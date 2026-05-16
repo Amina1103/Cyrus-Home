@@ -648,12 +648,21 @@ def get_recent_events(hours=6):
                 if prev["type"] == ev["type"] and prev["action"] == "open":
                     duration = int((ev["created_at"] - prev["created_at"]) / 60)
                     break
-            if duration is not None:
-                lines.append(f"{ts} 关了 {ev['value']}（用了 {duration} 分钟）")
+            if ev["type"] == "reading":
+                if duration is not None:
+                    lines.append(f"{ts} 关了 {ev['value']}（你们一起读了 {duration} 分钟）")
+                else:
+                    lines.append(f"{ts} 关了 {ev['value']}")
             else:
-                lines.append(f"{ts} 关了 {ev['value']}")
+                if duration is not None:
+                    lines.append(f"{ts} 关了 {ev['value']}（用了 {duration} 分钟）")
+                else:
+                    lines.append(f"{ts} 关了 {ev['value']}")
         else:
-            lines.append(f"{ts} 打开了 {ev['value']}")
+            if ev["type"] == "reading":
+                lines.append(f"{ts} 和你一起打开了 {ev['value']}")
+            else:
+                lines.append(f"{ts} 打开了 {ev['value']}")
     return "\n".join(lines)
 
 def get_recent_feed(hours=6):
