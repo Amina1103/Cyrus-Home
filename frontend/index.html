@@ -375,7 +375,7 @@ try{applyChatBg()}catch(e){}
 function showView(n){
     if(currentBook&&n!=='reading'){try{closeReader()}catch(e){}}
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));$(n+'View').classList.add('active');
-    if(n==='chat'){updateModelPill();if(!currentSessionId)initChat()}if(n==='reading')loadBookshelf();if(n==='day')showDayView();if(n==='feed')showFeedView()
+    if(n==='chat'){applyChatBg();updateModelPill();if(!currentSessionId)initChat()}if(n==='reading')loadBookshelf();if(n==='day')showDayView();if(n==='feed')showFeedView()
 }
 window.addEventListener('pagehide',()=>{if(currentBook)_fireReadingClose(currentBook)});
 function showToast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),1500)}
