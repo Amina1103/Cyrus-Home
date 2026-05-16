@@ -740,6 +740,9 @@ def build_system_blocks(sid=None):
     if bp2_parts:
         blocks.append({"type":"text","text":"\n\n".join(bp2_parts),"cache_control":{"type":"ephemeral"}})
     blocks.append({"type":"text","text":DIARY_REFERENCE,"cache_control":{"type":"ephemeral"}})
+    ev = get_recent_events(hours=6)
+    if ev:
+        blocks.append({"type":"text","text":f"最近的活动：\n{ev}"})
     return blocks
 
 def build_keepalive_blocks():
@@ -2137,6 +2140,9 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         )
         if recent_context:
             sys_blocks.append({"type":"text","text":f"你们最近聊的内容：\n{recent_context}"})
+        events_log = get_recent_events(hours=6)
+        if events_log:
+            sys_blocks.append({"type":"text","text":f"最近的活动：\n{events_log}"})
         if memory:
             sys_blocks.append({"type":"text","text":f"浮现的记忆：\n{memory}"})
         if prev_thoughts:
