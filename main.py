@@ -2906,6 +2906,20 @@ async def reading_chapter_v2(bid: str, idx: int):
         body = re.sub(r'(<img[^>]+src=)"([^"]+)"', lambda mm: mm.group(1) + '"' + fix_url(mm.group(2)) + '"', body)
         body = re.sub(r"(<img[^>]+src=)'([^']+)'", lambda mm: mm.group(1) + "'" + fix_url(mm.group(2)) + "'", body)
         body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL | re.IGNORECASE)
+        # 把注释/上标图标（<a><img alt="注"></a> 或裸 <img alt="①">）替换成小 sup 标记，
+        # 避免缺图时 alt 渲染成页面中间大水印
+        body = re.sub(
+            r'<a[^>]*>\s*<img[^>]*\balt=["\']([^"\']{1,4})["\'][^>]*/?>\s*</a>',
+            lambda mm: f'<sup class="ann">[{mm.group(1)}]</sup>',
+            body, flags=re.IGNORECASE
+        )
+        body = re.sub(
+            r'<img[^>]*\balt=["\']([^"\']{1,4})["\'][^>]*/?>',
+            lambda mm: f'<sup class="ann">[{mm.group(1)}]</sup>',
+            body, flags=re.IGNORECASE
+        )
+        # 图片懒加载 + 异步解码，长章节首屏更快
+        body = re.sub(r'<img\b(?![^>]*\bloading=)', '<img loading="lazy" decoding="async"', body, flags=re.IGNORECASE)
         return {"html": body}
     except Exception as e:
         print(f"⚠ chapter 解析失败 {bid}/{idx}: {e}")
