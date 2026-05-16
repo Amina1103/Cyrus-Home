@@ -2806,6 +2806,134 @@ async def get_reading_comments(bid:str):
     c=get_db(); rows=c.execute("SELECT comment,page_text,created_at FROM reading_comments WHERE book_id=? ORDER BY created_at DESC LIMIT 50",(bid,)).fetchall(); c.close()
     return {"comments":[{"comment":r["comment"],"context":r["page_text"],"time":r["created_at"]} for r in rows]}
 
+# ══ Reading v2 (native renderer, no epub.js) ══
+def _resolve_epub_path(base_dir, href):
+    href = href.split('#')[0]
+    full = (base_dir + '/' + href) if base_dir else href
+    parts = []
+    for part in full.replace('\\', '/').split('/'):
+        if part == '..' and parts: parts.pop()
+        elif part and part != '.': parts.append(part)
+    return '/'.join(parts)
+
+def _parse_epub_structure(epub_path):
+    with zipfile.ZipFile(epub_path) as z:
+        container = z.read("META-INF/container.xml").decode('utf-8', errors='replace')
+        m = re.search(r'full-path="([^"]+)"', container)
+        if not m: return None
+        opf_path = m.group(1)
+        opf_dir = os.path.dirname(opf_path)
+        opf_xml = z.read(opf_path).decode('utf-8', errors='replace')
+        root = ET.fromstring(opf_xml)
+        ns = {'opf': 'http://www.idpf.org/2007/opf'}
+        manifest = {}
+        for item in root.findall('.//opf:manifest/opf:item', ns):
+            iid = item.get('id'); href = item.get('href'); mtype = item.get('media-type', '')
+            if iid and href:
+                manifest[iid] = {'href': href, 'media_type': mtype, 'zip_path': _resolve_epub_path(opf_dir, href)}
+        spine = []
+        for itemref in root.findall('.//opf:spine/opf:itemref', ns):
+            idref = itemref.get('idref')
+            if idref and idref in manifest:
+                spine.append(manifest[idref]['zip_path'])
+        return {'opf_dir': opf_dir, 'manifest': manifest, 'spine': spine}
+
+def _extract_chapter_titles(epub_path, info):
+    titles = {}
+    try:
+        with zipfile.ZipFile(epub_path) as z:
+            for n in z.namelist():
+                if n.lower().endswith('.ncx'):
+                    try:
+                        ncx_xml = z.read(n).decode('utf-8', errors='replace')
+                        ncx_root = ET.fromstring(ncx_xml)
+                        ncx_ns = {'ncx': 'http://www.daisy.org/z3986/2005/ncx/'}
+                        ncx_dir = os.path.dirname(n)
+                        for nav_point in ncx_root.findall('.//ncx:navPoint', ncx_ns):
+                            label_el = nav_point.find('.//ncx:navLabel/ncx:text', ncx_ns)
+                            content_el = nav_point.find('.//ncx:content', ncx_ns)
+                            if label_el is not None and content_el is not None and label_el.text:
+                                src = content_el.get('src', '')
+                                resolved = _resolve_epub_path(ncx_dir, src)
+                                if resolved not in titles:
+                                    titles[resolved] = label_el.text.strip()
+                    except Exception as e:
+                        print(f"⚠ ncx 解析失败: {e}")
+                    break
+    except Exception as e:
+        print(f"⚠ 提取章节标题失败: {e}")
+    return titles
+
+@app.get("/api/reading/v2/spine/{bid}")
+async def reading_spine_v2(bid: str):
+    c = get_db()
+    b = c.execute("SELECT title, file_path FROM books WHERE id=?", (bid,)).fetchone()
+    c.close()
+    if not b: return JSONResponse({"error": "not found"}, 404)
+    try:
+        info = _parse_epub_structure(b["file_path"])
+        if not info: return JSONResponse({"error": "parse failed"}, 500)
+        titles = _extract_chapter_titles(b["file_path"], info)
+        chapters = []
+        for i, zip_path in enumerate(info['spine']):
+            chapters.append({"idx": i, "title": titles.get(zip_path, "")})
+        return {"title": b["title"], "chapters": chapters}
+    except Exception as e:
+        print(f"⚠ spine 解析失败 {bid}: {e}")
+        return JSONResponse({"error": str(e)}, 500)
+
+@app.get("/api/reading/v2/chapter/{bid}/{idx}")
+async def reading_chapter_v2(bid: str, idx: int):
+    c = get_db()
+    b = c.execute("SELECT file_path FROM books WHERE id=?", (bid,)).fetchone()
+    c.close()
+    if not b: return JSONResponse({"error": "not found"}, 404)
+    try:
+        info = _parse_epub_structure(b["file_path"])
+        if not info or idx < 0 or idx >= len(info['spine']):
+            return JSONResponse({"error": "chapter not found"}, 404)
+        zip_path = info['spine'][idx]
+        with zipfile.ZipFile(b["file_path"]) as z:
+            html = z.read(zip_path).decode('utf-8', errors='replace')
+        m = re.search(r'<body[^>]*>(.*?)</body>', html, re.DOTALL | re.IGNORECASE)
+        body = m.group(1) if m else html
+        chapter_dir = os.path.dirname(zip_path)
+        def fix_url(orig):
+            if not orig or orig.startswith(('http://', 'https://', 'data:', '/')):
+                return orig
+            resolved = _resolve_epub_path(chapter_dir, orig)
+            return f"/api/reading/v2/asset/{bid}/{resolved}"
+        body = re.sub(r'(<img[^>]+src=)"([^"]+)"', lambda mm: mm.group(1) + '"' + fix_url(mm.group(2)) + '"', body)
+        body = re.sub(r"(<img[^>]+src=)'([^']+)'", lambda mm: mm.group(1) + "'" + fix_url(mm.group(2)) + "'", body)
+        body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL | re.IGNORECASE)
+        return {"html": body}
+    except Exception as e:
+        print(f"⚠ chapter 解析失败 {bid}/{idx}: {e}")
+        return JSONResponse({"error": str(e)}, 500)
+
+@app.get("/api/reading/v2/asset/{bid}/{path:path}")
+async def reading_asset_v2(bid: str, path: str):
+    c = get_db()
+    b = c.execute("SELECT file_path FROM books WHERE id=?", (bid,)).fetchone()
+    c.close()
+    if not b: return JSONResponse({"error": "not found"}, 404)
+    try:
+        with zipfile.ZipFile(b["file_path"]) as z:
+            try:
+                data = z.read(path)
+            except KeyError:
+                return JSONResponse({"error": "asset not found"}, 404)
+        ext = os.path.splitext(path)[1].lower()
+        media_types = {
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+            '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+            '.css': 'text/css', '.ttf': 'font/ttf', '.otf': 'font/otf',
+            '.woff': 'font/woff', '.woff2': 'font/woff2',
+        }
+        return Response(content=data, media_type=media_types.get(ext, 'application/octet-stream'))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, 500)
+
 @app.get("/")
 async def root(): return FileResponse("frontend/index.html")
 

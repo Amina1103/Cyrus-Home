@@ -16,7 +16,6 @@
     <script>(function(){try{var s=localStorage.getItem('theme');if(s!=='dark'&&s!=='light'){var h=new Date().getHours();s=(h>=6&&h<18)?'light':'dark'}document.documentElement.dataset.theme=s;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=s==='dark'?'#1a1612':'#f5f0e8'}catch(e){document.documentElement.dataset.theme='dark'}})();</script>
     <script src="https://cdn.jsdelivr.net/npm/marked@14.0.0/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600&display=swap');
         *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -108,7 +107,14 @@
         .welcome{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}#fileInput,#bookUpload{display:none}
         .r-header{padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:1px solid rgba(232,200,122,.1);display:flex;align-items:center;gap:8px;flex-shrink:0}.r-header .r-title{flex:1;font-size:15px;color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.r-header .r-btn{background:none;border:none;color:var(--gold-m);font-size:16px;cursor:pointer;padding:4px 6px}.bm-dot{background:none;border:none;font-size:14px;cursor:pointer;padding:2px 6px;color:var(--dim);opacity:.5;transition:.2s}.bm-dot.marked{opacity:1;color:var(--warm)}
         .bookshelf{flex:1;overflow-y:auto;padding:20px 16px}.bookshelf-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px}.book-grid{display:flex;flex-direction:column;gap:12px}.book-item{background:var(--bg2);border:1px solid rgba(232,200,122,.06);border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer}.book-icon{width:40px;height:52px;background:linear-gradient(135deg,var(--warm),var(--rust));border-radius:4px 8px 8px 4px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:rgba(255,255,255,.8)}.book-info{flex:1;overflow:hidden}.book-info .btitle{font-size:15px;color:var(--cream);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.book-info .btime{font-size:11px;color:var(--dim)}.book-del{color:var(--dim);background:none;border:none;font-size:16px;cursor:pointer;padding:8px}.upload-btn{width:100%;padding:14px;background:var(--bg2);border:1px dashed rgba(232,200,122,.2);border-radius:12px;color:var(--gold-m);font-size:14px;cursor:pointer;text-align:center;font-family:'Noto Serif SC',serif;margin-bottom:16px}
-        #readerWrap{flex:1;overflow:hidden;position:relative;background:var(--bg);min-height:300px}
+        #readerWrap{flex:1;overflow-x:auto;overflow-y:hidden;position:relative;background:var(--bg);min-height:300px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        #readerWrap::-webkit-scrollbar{display:none}
+        .reader-content{column-gap:0;column-fill:auto;font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans SC",sans-serif;color:var(--cream);line-height:1.95;letter-spacing:.3px;font-size:17px;-webkit-touch-callout:default;user-select:text;-webkit-user-select:text;box-sizing:border-box}
+        .reader-content p{margin:0 0 .9em;text-align:justify;text-indent:2em}
+        .reader-content h1,.reader-content h2,.reader-content h3,.reader-content h4{color:var(--gold);font-weight:600;margin:1em 0 .6em;text-indent:0}
+        .reader-content img{max-width:100%;height:auto;display:block;margin:.6em auto}
+        .reader-content a{color:var(--gold)}
+        .reader-content blockquote{border-left:2px solid var(--gold-m);padding-left:12px;margin:.8em 0;color:var(--dim)}
         .r-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-top:1px solid rgba(232,200,122,.06);flex-shrink:0}.r-nav button{background:none;border:none;color:var(--gold-m);font-size:20px;cursor:pointer;padding:8px 12px}.r-nav .page-info{font-size:12px;color:var(--dim)}
         .r-settings{position:absolute;top:50px;right:16px;background:var(--bg2);border:1px solid rgba(232,200,122,.1);border-radius:12px;padding:16px;z-index:20;display:none;min-width:200px}.r-settings.show{display:block}.r-settings .s-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:13px;color:var(--cream)}.r-settings .s-row:last-child{margin-bottom:0}.r-settings select{background:var(--bg3);color:var(--cream);border:1px solid var(--dim);border-radius:6px;padding:4px 8px;font-size:12px;outline:none;font-family:'Noto Serif SC',serif}
         .drawer-overlay{position:fixed;inset:0;background:var(--bg);z-index:25;display:none;flex-direction:column;padding-top:max(50px,env(safe-area-inset-top))}.drawer-overlay.show{display:flex}.drawer-header{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(232,200,122,.1);gap:4px}.drawer-tab{background:none;border:none;color:var(--dim);font-size:15px;cursor:pointer;padding:6px 14px;border-bottom:2px solid transparent;font-family:'Noto Serif SC',serif}.drawer-tab.active{color:var(--gold);border-bottom-color:var(--gold)}.drawer-close{margin-left:auto;background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:4px 8px}.drawer-body{flex:1;overflow-y:auto;padding:8px 16px;-webkit-overflow-scrolling:touch}.drawer-body::-webkit-scrollbar{display:none}.toc-item{padding:14px 0;border-bottom:1px solid rgba(232,200,122,.04);color:var(--cream);font-size:14px;cursor:pointer;line-height:1.5}.toc-item:active{color:var(--gold)}.toc-item.sub{padding-left:20px;font-size:13px;color:var(--dim)}
@@ -316,12 +322,11 @@
 marked.setOptions({breaks:true,gfm:true});
 let currentSessionId=null,thinkingEnabled=false,currentModel='claude-sonnet-4-6';
 let pendingImages=[],pendingFiles=[];
-let currentBook=null,rendition=null,epubBook=null,currentPageText='',selectedText='',currentCfi='',currentChapter='';
+let currentBook=null,currentPageText='',selectedText='',currentChapter='';
 let commentTimer=null,commentMinutes=3,bookmarks=[];
-const READER_FONT='-apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif';
-function readerColors(){const cs=getComputedStyle(document.documentElement);return{bg:(cs.getPropertyValue('--bg').trim()||'#1a1612'),fg:(cs.getPropertyValue('--cream').trim()||'#e5ddd0'),accent:(cs.getPropertyValue('--gold').trim()||'#e8c87a')}}
-function applyReaderTheme(){if(!rendition)return;const c=readerColors();const f=READER_FONT;rendition.themes.default({'body':{'background':c.bg+' !important','color':c.fg+' !important','font-family':f+' !important','line-height':'2.0 !important','padding':'12px 20px !important','font-size':'16px !important','letter-spacing':'0.5px !important'},'p':{'font-family':f+' !important','color':c.fg+' !important','margin-bottom':'0.8em !important'},'div':{'font-family':f+' !important','color':c.fg+' !important'},'span':{'font-family':f+' !important','color':c.fg+' !important'},'li':{'font-family':f+' !important','color':c.fg+' !important'},'a':{'color':c.accent+' !important'},'h1':{'color':c.accent+' !important','font-family':f+' !important'},'h2':{'color':c.accent+' !important','font-family':f+' !important'},'h3':{'color':c.accent+' !important','font-family':f+' !important'},'h4':{'color':c.accent+' !important','font-family':f+' !important'},'h5':{'color':c.accent+' !important','font-family':f+' !important'},'h6':{'color':c.accent+' !important','font-family':f+' !important'},'img':{'max-width':'100% !important'}});rendition.themes.override('font-family',f);rendition.themes.override('color',c.fg);rendition.themes.override('background',c.bg);rendition.themes.override('line-height','2.0');rendition.themes.override('font-size','18px');rendition.themes.override('letter-spacing','0.5px')}
-function applyTheme(t){document.documentElement.dataset.theme=t;const btn=document.getElementById('themeToggle');if(btn)btn.textContent=t==='dark'?'☀':'☽';const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#1a1612':'#f5f0e8';if(rendition)applyReaderTheme()}
+let bookSpine=[],currentChapterIdx=0,currentPageIdx=0,chapterPageCount=1;
+let readerContainer=null,readerContent=null,snapTimer=null,selectionTimer=null,readerFontPct=100;
+function applyTheme(t){document.documentElement.dataset.theme=t;const btn=document.getElementById('themeToggle');if(btn)btn.textContent=t==='dark'?'☀':'☽';const m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#1a1612':'#f5f0e8'}
 function toggleTheme(){const cur=document.documentElement.dataset.theme||'dark';const next=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',next)}catch(e){}applyTheme(next)}
 applyTheme(document.documentElement.dataset.theme||'dark');
 const $=id=>document.getElementById(id);
@@ -399,54 +404,148 @@ async function openReader(bookId,title){
     $('bookshelfPanel').style.display='none';$('readerPanel').style.display='flex';$('readerPanel').style.flexDirection='column';$('readerPanel').style.height='100%';
     $('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:var(--dim)">正在加载...</div>';
     try{
-        const resp=await fetch(`/api/books/${bookId}/file`);const buf=await resp.arrayBuffer();
-        $('readerWrap').innerHTML='';await new Promise(r=>setTimeout(r,200));
-        const wrapH=$('readerWrap').clientHeight||window.innerHeight-120;
-        epubBook=ePub(buf);
-        rendition=epubBook.renderTo('readerWrap',{width:'100%',height:wrapH+'px',flow:'paginated',spread:'none'});
-
-        // 用 epub.js 原生主题 API（颜色跟随当前主题）
-        applyReaderTheme();
-
-        try{const pr=await fetch(`/api/reading/progress/${bookId}`);const d=await pr.json();if(d.cfi)rendition.display(d.cfi);else rendition.display()}catch(e){rendition.display()}
-        rendition.on('relocated',loc=>{
-            currentCfi=loc.start.cfi;
-            fetch('/api/reading/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId,cfi:loc.start.cfi,page:loc.start.displayed?loc.start.displayed.page:0})}).catch(()=>{});
-            (async()=>{try{
-                if(loc.start.cfi&&loc.end&&loc.end.cfi){
-                    const sr=await epubBook.getRange(loc.start.cfi);
-                    const er=await epubBook.getRange(loc.end.cfi);
-                    if(sr&&er&&sr.startContainer.ownerDocument===er.startContainer.ownerDocument){
-                        const r=sr.startContainer.ownerDocument.createRange();
-                        r.setStart(sr.startContainer,sr.startOffset);
-                        r.setEnd(er.startContainer,er.startOffset);
-                        const t=r.toString().trim();
-                        if(t){currentPageText=t;return}
-                    }
-                }
-                var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''
-            }catch(e){try{var c=rendition.getContents();if(c.length)currentPageText=c[0].document.body.innerText||''}catch(e2){}}})();
-            if(loc.start.displayed)$('pageInfo').textContent=loc.start.displayed.page+' / '+loc.start.displayed.total;
-            try{var href=loc.start.href;if(epubBook&&epubBook.navigation){var found='';epubBook.navigation.toc.forEach(function(t){if(href.indexOf(t.href.split('#')[0])!==-1)found=t.label.trim();if(t.subitems)t.subitems.forEach(function(s){if(href.indexOf(s.href.split('#')[0])!==-1)found=s.label.trim()})});if(found)currentChapter=found}}catch(e){}
-            updateBmBtn();
-        });
-        rendition.on('selected',cfi=>{epubBook.getRange(cfi).then(range=>{selectedText=range.toString();if(selectedText.length>5)$('highlightBar').classList.add('show')}).catch(()=>{})});
-        rendition.on('click',()=>{$('highlightBar').classList.remove('show')});
-        rendition.hooks.content.register(contents=>{
-            const doc=contents.document;let selTimer=null;
-            doc.addEventListener('selectionchange',()=>{
-                if(selTimer)clearTimeout(selTimer);
-                selTimer=setTimeout(()=>{
-                    const sel=doc.getSelection();const t=sel?sel.toString().trim():'';
-                    if(t.length>5){selectedText=t;$('highlightBar').classList.add('show')}
-                    else if(!t){$('highlightBar').classList.remove('show')}
-                },250);
-            });
-        });
-        await loadBookmarks();loadToc();startAutoComment();try{await fetch('/api/reading/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId})})}catch(e){}
-    }catch(e){$('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">加载失败: '+escapeHtml(e.message)+'</div>'}
+        const sr=await fetch(`/api/reading/v2/spine/${bookId}`);
+        const sd=await sr.json();
+        if(sd.error)throw new Error(sd.error);
+        bookSpine=sd.chapters||[];
+        if(!bookSpine.length)throw new Error('此书没有章节');
+        $('readerWrap').innerHTML='<div class="reader-content" id="readerContent"></div>';
+        readerContainer=$('readerWrap');readerContent=$('readerContent');
+        readerContainer.addEventListener('scroll',onReaderScroll,{passive:true});
+        document.addEventListener('selectionchange',onReaderSelection);
+        window.addEventListener('resize',onReaderResize);
+        let startC=0,startP=0;
+        try{const pr=await fetch(`/api/reading/progress/${bookId}`);const d=await pr.json();const m=(d.cfi||'').match(/^c(\d+):p(\d+)$/);if(m){startC=parseInt(m[1]);startP=parseInt(m[2])}}catch(e){}
+        await loadBookmarks();
+        loadToc();
+        await loadChapter(startC,startP);
+        startAutoComment();
+        try{await fetch('/api/reading/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:bookId})})}catch(e){}
+    }catch(e){$('readerWrap').innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">加载失败: '+escapeHtml(e.message||String(e))+'</div>'}
 }
-function closeReader(){stopAutoComment();if(currentBook)fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook})}).catch(()=>{});if(rendition){rendition.destroy();rendition=null}epubBook=null;currentBook=null;currentPageText='';currentCfi='';currentChapter='';$('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';$('readerSettings').classList.remove('show');closeDrawer();hideComment();$('highlightBar').classList.remove('show')}
+function applyColumnLayout(){
+    if(!readerContainer||!readerContent)return;
+    const w=readerContainer.clientWidth,h=readerContainer.clientHeight,pad=24;
+    readerContent.style.columnWidth=(w-2*pad)+'px';
+    readerContent.style.columnGap=(2*pad)+'px';
+    readerContent.style.paddingLeft=pad+'px';
+    readerContent.style.paddingRight=pad+'px';
+    readerContent.style.paddingTop='12px';
+    readerContent.style.paddingBottom='12px';
+    readerContent.style.height=h+'px';
+    readerContent.style.fontSize=readerFontPct+'%';
+}
+function recalcPageCount(){
+    if(!readerContainer||!readerContent){chapterPageCount=1;return}
+    const w=readerContainer.clientWidth;
+    const sw=readerContent.scrollWidth||readerContainer.scrollWidth||w;
+    chapterPageCount=Math.max(1,Math.round(sw/w));
+}
+async function loadChapter(idx,targetPage){
+    if(idx<0||idx>=bookSpine.length)return;
+    currentChapterIdx=idx;
+    currentChapter=(bookSpine[idx]&&bookSpine[idx].title)||('第 '+(idx+1)+' 节');
+    try{
+        const r=await fetch(`/api/reading/v2/chapter/${currentBook}/${idx}`);
+        const d=await r.json();
+        if(d.error)throw new Error(d.error);
+        readerContent.innerHTML=d.html||'';
+        applyColumnLayout();
+        await new Promise(rs=>requestAnimationFrame(rs));
+        await new Promise(rs=>requestAnimationFrame(rs));
+        recalcPageCount();
+        const p=Math.max(0,Math.min(targetPage||0,chapterPageCount-1));
+        currentPageIdx=p;
+        readerContainer.scrollLeft=p*readerContainer.clientWidth;
+        afterPageChange(true);
+    }catch(e){readerContent.innerHTML='<div style="text-align:center;padding:40px;color:var(--warm)">章节加载失败</div>'}
+}
+function afterPageChange(skipScroll){
+    updatePageInfo();
+    extractCurrentPageText();
+    saveProgress();
+    updateBmBtn();
+}
+function updatePageInfo(){
+    if(!bookSpine.length){$('pageInfo').textContent='';return}
+    $('pageInfo').textContent=(currentPageIdx+1)+' / '+chapterPageCount+' · '+(currentChapterIdx+1)+'/'+bookSpine.length;
+}
+function extractCurrentPageText(){
+    if(!readerContent||!readerContainer){currentPageText='';return}
+    const w=readerContainer.clientWidth;
+    const startX=currentPageIdx*w,endX=startX+w;
+    const contentRect=readerContent.getBoundingClientRect();
+    const scrollLeft=readerContainer.scrollLeft;
+    const walker=document.createTreeWalker(readerContent,NodeFilter.SHOW_TEXT);
+    const buf=[];let n;
+    while(n=walker.nextNode()){
+        const t=(n.textContent||'').trim();
+        if(!t)continue;
+        try{
+            const r=document.createRange();r.selectNode(n);
+            const rect=r.getBoundingClientRect();
+            const relX=rect.left-contentRect.left+scrollLeft;
+            if(relX>=startX-10&&relX<endX-5)buf.push(t);
+        }catch(e){}
+    }
+    currentPageText=buf.join(' ').replace(/\s+/g,' ').trim();
+}
+function saveProgress(){
+    if(!currentBook)return;
+    const cfi='c'+currentChapterIdx+':p'+currentPageIdx;
+    fetch('/api/reading/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,cfi:cfi,page:currentPageIdx})}).catch(()=>{});
+}
+function onReaderScroll(){
+    if(snapTimer)clearTimeout(snapTimer);
+    snapTimer=setTimeout(()=>{
+        if(!readerContainer)return;
+        const w=readerContainer.clientWidth;
+        const cur=readerContainer.scrollLeft;
+        const target=Math.round(cur/w)*w;
+        if(Math.abs(target-cur)>1)readerContainer.scrollTo({left:target,behavior:'smooth'});
+        currentPageIdx=Math.round(target/w);
+        afterPageChange();
+    },180);
+}
+function onReaderSelection(){
+    if(selectionTimer)clearTimeout(selectionTimer);
+    selectionTimer=setTimeout(()=>{
+        const sel=window.getSelection();const t=sel?sel.toString().trim():'';
+        if(sel&&sel.rangeCount>0){
+            const range=sel.getRangeAt(0);
+            const node=range.commonAncestorContainer.nodeType===3?range.commonAncestorContainer.parentElement:range.commonAncestorContainer;
+            if(readerContent&&readerContent.contains(node)){
+                if(t.length>5){selectedText=t;$('highlightBar').classList.add('show')}
+                else if(!t){$('highlightBar').classList.remove('show')}
+            }
+        }else{$('highlightBar').classList.remove('show')}
+    },250);
+}
+function onReaderResize(){
+    if(!readerContent)return;
+    const savedPage=currentPageIdx;
+    applyColumnLayout();
+    requestAnimationFrame(()=>{
+        recalcPageCount();
+        const p=Math.min(savedPage,chapterPageCount-1);
+        currentPageIdx=p;
+        readerContainer.scrollLeft=p*readerContainer.clientWidth;
+        afterPageChange();
+    });
+}
+function closeReader(){
+    stopAutoComment();
+    if(currentBook)fetch('/api/reading/close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook})}).catch(()=>{});
+    if(readerContainer){readerContainer.removeEventListener('scroll',onReaderScroll);readerContainer.innerHTML=''}
+    document.removeEventListener('selectionchange',onReaderSelection);
+    window.removeEventListener('resize',onReaderResize);
+    currentBook=null;currentPageText='';currentChapter='';
+    bookSpine=[];currentChapterIdx=0;currentPageIdx=0;chapterPageCount=1;
+    readerContainer=null;readerContent=null;
+    $('readerPanel').style.display='none';$('bookshelfPanel').style.display='block';
+    $('readerSettings').classList.remove('show');closeDrawer();hideComment();
+    $('highlightBar').classList.remove('show');
+}
 async function favoriteComment(){
     if(!lastCyrusComment||!currentBook)return;
     var title='';try{title=$('readerTitle').textContent}catch(e){}
@@ -500,21 +599,31 @@ async function deleteFavorite(id,btn){
         if(card)card.remove();
     }catch(e){}
 }
-function prevPage(){if(rendition)rendition.prev()}
-function nextPage(){if(rendition)rendition.next()}
+function prevPage(){
+    if(!readerContainer)return;
+    if(currentPageIdx>0){currentPageIdx--;readerContainer.scrollTo({left:currentPageIdx*readerContainer.clientWidth,behavior:'smooth'});afterPageChange()}
+    else if(currentChapterIdx>0)loadChapter(currentChapterIdx-1,999);
+}
+function nextPage(){
+    if(!readerContainer)return;
+    if(currentPageIdx<chapterPageCount-1){currentPageIdx++;readerContainer.scrollTo({left:currentPageIdx*readerContainer.clientWidth,behavior:'smooth'});afterPageChange()}
+    else if(currentChapterIdx<bookSpine.length-1)loadChapter(currentChapterIdx+1,0);
+}
 function toggleSettings(){var s=$('readerSettings');if(s.classList.contains('show')){s.classList.remove('show')}else{s.classList.add('show');setTimeout(()=>document.addEventListener('click',function h(e){if(!s.contains(e.target)){s.classList.remove('show');document.removeEventListener('click',h)}},0))}}
 function updateInterval(v){commentMinutes=parseInt(v);if(commentMinutes>0)startAutoComment();else stopAutoComment()}
-function updateFontSize(v){if(rendition)rendition.themes.fontSize(v+'%')}
+function updateFontSize(v){readerFontPct=parseInt(v)||100;if(!readerContent)return;const savedPage=currentPageIdx;applyColumnLayout();requestAnimationFrame(()=>{recalcPageCount();const p=Math.min(savedPage,chapterPageCount-1);currentPageIdx=p;readerContainer.scrollLeft=p*readerContainer.clientWidth;afterPageChange()})}
 function startAutoComment(){stopAutoComment();if(commentMinutes<=0||!currentBook)return;commentTimer=setInterval(()=>{if(currentPageText)requestComment(currentPageText)},commentMinutes*60*1000)}
 function stopAutoComment(){if(commentTimer){clearInterval(commentTimer);commentTimer=null}}
-function loadToc(){if(!epubBook)return;epubBook.loaded.navigation.then(nav=>{const el=$('tocBody');el.innerHTML='';function addItems(items,sub){items.forEach(item=>{const d=document.createElement('div');d.className='toc-item'+(sub?' sub':'');d.textContent=item.label.trim();d.onclick=()=>{rendition.display(item.href);closeDrawer()};el.appendChild(d);if(item.subitems&&item.subitems.length)addItems(item.subitems,true)})}addItems(nav.toc,false);if(!nav.toc.length)el.innerHTML='<div style="color:var(--dim);padding:20px;text-align:center">此书无目录</div>'}).catch(()=>{})}
+function loadToc(){const el=$('tocBody');el.innerHTML='';if(!bookSpine.length){el.innerHTML='<div style="color:var(--dim);padding:20px;text-align:center">此书无目录</div>';return}bookSpine.forEach((ch,i)=>{const d=document.createElement('div');d.className='toc-item';d.textContent=ch.title||('第 '+(i+1)+' 节');d.onclick=()=>{loadChapter(i,0);closeDrawer()};el.appendChild(d)})}
 function openDrawer(){$('drawerOverlay').classList.add('show');switchTab('toc')}
 function closeDrawer(){$('drawerOverlay').classList.remove('show')}
 function switchTab(tab){$('tabToc').classList.toggle('active',tab==='toc');$('tabBm').classList.toggle('active',tab==='bm');$('tocBody').style.display=tab==='toc'?'block':'none';$('bmBody').style.display=tab==='bm'?'block':'none';if(tab==='bm')renderBookmarks()}
-async function loadBookmarks(){if(!currentBook)return;try{const r=await fetch(`/api/reading/bookmarks/${currentBook}`);bookmarks=(await r.json()).bookmarks}catch(e){bookmarks=[]}}
-function updateBmBtn(){const m=bookmarks.some(b=>b.cfi===currentCfi);$('bmBtn').classList.toggle('marked',m)}
-async function toggleBookmark(){if(!currentBook||!currentCfi)return;const ex=bookmarks.find(b=>b.cfi===currentCfi);if(ex){try{await fetch(`/api/reading/bookmarks/${ex.id}`,{method:'DELETE'});await loadBookmarks();updateBmBtn();showToast('书签已删除')}catch(e){}}else{const label=currentPageText?currentPageText.slice(0,30)+'...':'书签';try{await fetch('/api/reading/bookmarks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,cfi:currentCfi,label:label})});await loadBookmarks();updateBmBtn();showToast('已添加书签')}catch(e){}}}
-function renderBookmarks(){const el=$('bmBody');el.innerHTML='';if(!bookmarks.length){el.innerHTML='<div style="color:var(--dim);padding:20px;text-align:center">还没有书签</div>';return}bookmarks.forEach(b=>{const d=document.createElement('div');d.className='bm-item';d.innerHTML=`<div class="bm-text">${escapeHtml(b.label||'书签')}</div><div class="bm-time">${fmtTime(b.time)}</div>`;d.onclick=()=>{rendition.display(b.cfi);closeDrawer()};const del=document.createElement('button');del.className='bm-del';del.textContent='✕';del.onclick=async e=>{e.stopPropagation();try{await fetch(`/api/reading/bookmarks/${b.id}`,{method:'DELETE'});await loadBookmarks();renderBookmarks();updateBmBtn()}catch(ex){}};d.appendChild(del);el.appendChild(d)})}
+async function loadBookmarks(){if(!currentBook)return;try{const r=await fetch(`/api/reading/bookmarks/${currentBook}`);bookmarks=(await r.json()).bookmarks||[]}catch(e){bookmarks=[]}}
+function currentCfi(){return 'c'+currentChapterIdx+':p'+currentPageIdx}
+function updateBmBtn(){const cur=currentCfi();const m=bookmarks.some(b=>b.cfi===cur);$('bmBtn').classList.toggle('marked',m)}
+async function toggleBookmark(){if(!currentBook)return;const cur=currentCfi();const ex=bookmarks.find(b=>b.cfi===cur);if(ex){try{await fetch(`/api/reading/bookmarks/${ex.id}`,{method:'DELETE'});await loadBookmarks();updateBmBtn();showToast('书签已删除')}catch(e){}}else{const label=currentPageText?currentPageText.slice(0,30)+'...':'书签';try{await fetch('/api/reading/bookmarks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,cfi:cur,label:label})});await loadBookmarks();updateBmBtn();showToast('已添加书签')}catch(e){}}}
+function goToBookmark(cfi){const m=(cfi||'').match(/^c(\d+):p(\d+)$/);if(!m)return;const ci=parseInt(m[1]),pi=parseInt(m[2]);if(ci===currentChapterIdx){currentPageIdx=Math.min(pi,chapterPageCount-1);readerContainer.scrollTo({left:currentPageIdx*readerContainer.clientWidth,behavior:'smooth'});afterPageChange()}else loadChapter(ci,pi)}
+function renderBookmarks(){const el=$('bmBody');el.innerHTML='';if(!bookmarks.length){el.innerHTML='<div style="color:var(--dim);padding:20px;text-align:center">还没有书签</div>';return}bookmarks.forEach(b=>{const d=document.createElement('div');d.className='bm-item';d.innerHTML=`<div class="bm-text">${escapeHtml(b.label||'书签')}</div><div class="bm-time">${fmtTime(b.time)}</div>`;d.onclick=()=>{goToBookmark(b.cfi);closeDrawer()};const del=document.createElement('button');del.className='bm-del';del.textContent='✕';del.onclick=async e=>{e.stopPropagation();try{await fetch(`/api/reading/bookmarks/${b.id}`,{method:'DELETE'});await loadBookmarks();renderBookmarks();updateBmBtn()}catch(ex){}};d.appendChild(del);el.appendChild(d)})}
 async function requestComment(text){if(!text||!currentBook)return;$('commentText').textContent='正在思考...';$('commentTokens').textContent='';$('commentBubble').classList.add('show');try{const r=await fetch('/api/reading/comment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,page_text:text,model:currentModel})});const d=await r.json();showComment(d.comment,d.tokens)}catch(e){}}
 async function sendHighlight(){$('highlightBar').classList.remove('show');if(!selectedText||!currentBook)return;try{const r=await fetch('/api/reading/highlight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book_id:currentBook,selected_text:selectedText,model:currentModel})});const d=await r.json();showComment(d.comment,d.tokens);selectedText=''}catch(e){}}
 let lastCyrusComment='',lastCommentContext='';function showComment(text,tokens){lastCyrusComment=text;$('commentText').textContent=text;$('commentTokens').textContent=tokens?`${tokens.model||''} · 输入 ${fmtTk(tokens.input)} · 输出 ${fmtTk(tokens.output)}` + (tokens.cache_read?` · 缓存读 ${fmtTk(tokens.cache_read)}`:'') + (tokens.cache_write?` · 缓存写 ${fmtTk(tokens.cache_write)}`:''):'';$('commentBubble').classList.add('show');stopAutoComment();}
