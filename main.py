@@ -2466,7 +2466,8 @@ async def _do_warmup(cfg_row):
             kw["max_tokens"] = budget + 1
         else:
             kw["max_tokens"] = 1
-        resp = client.messages.create(**kw)
+        with client.messages.stream(**kw) as stream:
+            resp = stream.get_final_message()
         u = resp.usage
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
