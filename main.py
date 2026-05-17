@@ -2248,10 +2248,11 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         for _round in range(4):
             kw = dict(
                 model=keepalive_model,
-                max_tokens=800,
+                max_tokens=5800,
                 system=sys_blocks,
                 messages=messages,
                 tools=tools,
+                thinking={"type": "enabled", "budget_tokens": 5000},
             )
             resp = client.messages.create(**kw)
             usage = getattr(resp, "usage", None)
@@ -2377,21 +2378,14 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
             c.commit()
 
         if action == "message" and content:
-            n = c.execute("SELECT COUNT(*) FROM messages WHERE source='keepalive' AND created_at>=?", (today_start,)).fetchone()[0]
-            last = c.execute("SELECT created_at FROM messages WHERE source='keepalive' ORDER BY created_at DESC LIMIT 1").fetchone()
-            if n >= 3:
-                _downgrade(f"今日 message 已 {n} 条")
-            elif last and log_ts - last["created_at"] < 10800:
-                _downgrade("距上次 message 不足 3h")
-            else:
-                sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
-                if sess:
-                    sid = sess["id"]
-                    c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)",
-                              (sid, "assistant", content, log_ts, "keepalive", 0))
-                    c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
-                    c.commit()
-                    await send_push_notification(title="Cyrus", body=content[:100], url="/")
+            sess = c.execute("SELECT id FROM sessions ORDER BY last_active DESC LIMIT 1").fetchone()
+            if sess:
+                sid = sess["id"]
+                c.execute("INSERT INTO messages(session_id, role, content, created_at, source, keepalive_consumed) VALUES(?,?,?,?,?,?)",
+                          (sid, "assistant", content, log_ts, "keepalive", 0))
+                c.execute("UPDATE sessions SET last_active=? WHERE id=?", (log_ts, sid))
+                c.commit()
+                await send_push_notification(title="Cyrus", body=content[:100], url="/")
         elif action == "muse" and content:
             n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type='muse' AND created_at>=?", (today_start,)).fetchone()[0]
             last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type='muse' ORDER BY created_at DESC LIMIT 1").fetchone()
