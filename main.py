@@ -2415,6 +2415,8 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                     dream_mem = ""
                     print(f"⚠ Keepalive diary dream 失败: {e}")
                 if dream_mem:
+                    dream_mem = re.sub(r'(?:hold|trace)\(content=".*?"[^)]*\)\s*', '', dream_mem, flags=re.DOTALL).strip()
+                if dream_mem:
                     rewrite_prompt = (
                         "你刚写了一段日记草稿。系统帮你浮现了最近沉淀下来的记忆碎片，让日记能有更真实的厚度。\n\n"
                         f"# 你的草稿\n{content}\n\n"
