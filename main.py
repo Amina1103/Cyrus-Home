@@ -1275,14 +1275,23 @@ async def feed_upload(file: UploadFile = File(...)):
     return {"ok": True, "path": final_path}
 
 @app.get("/api/feed")
-async def feed_list(page: int = 1, limit: int = 20):
+async def feed_list(page: int = 1, limit: int = 20, author: str = "", type: str = ""):
     if page < 1: page = 1
     if limit < 1 or limit > 100: limit = 20
     offset = (page - 1) * limit
     c = get_db()
+    conditions = ["type NOT IN ('status','app')"]
+    params = []
+    if author:
+        conditions.append("author = ?")
+        params.append(author)
+    if type:
+        conditions.append("type = ?")
+        params.append(type)
+    where = " AND ".join(conditions)
     rows = c.execute(
-        "SELECT * FROM feed WHERE type NOT IN ('status','app') ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        (limit, offset)
+        f"SELECT * FROM feed WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset)
     ).fetchall()
     c.close()
     return {"items": [_feed_row_to_dict(r) for r in rows], "page": page, "limit": limit}

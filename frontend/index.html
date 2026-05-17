@@ -184,6 +184,9 @@
         .feed-status-name{color:var(--gold);font-size:18px;font-weight:600;letter-spacing:.3px}
         .feed-status-text{color:var(--dim);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .feed-list{flex:1;overflow-y:auto;padding:14px 14px 28px;-webkit-overflow-scrolling:touch}.feed-list::-webkit-scrollbar{display:none}
+        .feed-filters{display:flex;gap:8px;padding:8px 16px 4px;flex-shrink:0}
+        .feed-filter-btn{padding:4px 14px;border-radius:16px;border:1px solid rgba(232,200,122,.2);background:transparent;color:var(--dim);font-size:13px;cursor:pointer;transition:all .2s}
+        .feed-filter-btn.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
         .feed-empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:14px;line-height:1.8}
         .feed-loading{text-align:center;color:var(--dim);padding:18px;font-size:12px;letter-spacing:1px}
         .feed-day-sep{text-align:center;color:var(--gold-m);font-size:11px;letter-spacing:3px;margin:24px 0 14px;opacity:.7}
@@ -302,6 +305,12 @@
             <span class="feed-status-name">Amina</span>
             <span class="feed-status-text" id="feedStatusText">点击设置状态</span>
         </div>
+    </div>
+    <div class="feed-filters" id="feedFilters">
+        <button class="feed-filter-btn active" onclick="setFeedFilter('','')">全部</button>
+        <button class="feed-filter-btn" onclick="setFeedFilter('cyrus','')">Cyrus</button>
+        <button class="feed-filter-btn" onclick="setFeedFilter('amina','')">Amina</button>
+        <button class="feed-filter-btn" onclick="setFeedFilter('','diary')">日记</button>
     </div>
     <div class="feed-list" id="feedList"></div>
 </div>
@@ -832,6 +841,17 @@ async function refreshPushStatus(){await initPush()}
 function checkAuth(r){if(r.status===401){window.location.href='/login';return false}return r.ok}
 const STATUS_PRESETS=['在健身','在工作','在喝咖啡','在应酬','在coding','在发呆'];
 let feedStatus='',feedPage=1,feedLimit=20,feedLoading=false,feedHasMore=true,feedItems=[];
+let feedFilterAuthor='', feedFilterType='';
+function setFeedFilter(author, type) {
+    feedFilterAuthor = author;
+    feedFilterType = type;
+    document.querySelectorAll('.feed-filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    feedPage = 1;
+    feedItems = [];
+    feedHasMore = true;
+    loadFeed(true);
+}
 let composeImages=[],feedScrollBound=false;
 let avatarVersion=Date.now(),avatarPickWho='amina';
 let feedBgVersion=Date.now();
@@ -850,10 +870,10 @@ function feedDayLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=
 function feedTimeLabel(ts){const t=bjToday();const dt=new Date(ts*1000);const bj=new Date(dt.getTime()+(dt.getTimezoneOffset()+480)*60000);const y=bj.getFullYear(),m=pad2(bj.getMonth()+1),dd=pad2(bj.getDate());const ymd=y+'-'+m+'-'+dd;const hm=pad2(bj.getHours())+':'+pad2(bj.getMinutes());if(ymd===t.ymd)return'今天 '+hm;const[tY,tM,tD]=t.ymd.split('-').map(Number);const yest=new Date(tY,tM-1,tD-1);const yymd=yest.getFullYear()+'-'+pad2(yest.getMonth()+1)+'-'+pad2(yest.getDate());if(ymd===yymd)return'昨天 '+hm;return bj.getFullYear()+'年'+(bj.getMonth()+1)+'月'+bj.getDate()+'日 '+hm}
 async function deleteFeed(fid){if(!confirm('确定删除这条动态吗？'))return;try{const r=await fetch('/api/feed/'+fid,{method:'DELETE'});if(!checkAuth(r)){showToast('删除失败');return}const d=await r.json();if(d&&d.ok){feedItems=feedItems.filter(it=>it.id!==fid);renderFeed();showToast('已删除')}else{showToast('删除失败')}}catch(e){showToast('删除失败')}}
 function imgPathToUrl(p){if(!p)return'';if(p.startsWith('http')||p.startsWith('/'))return p;const fname=p.split(/[\\/]/).pop();return'/api/images/'+fname}
-async function showFeedView(){feedLoading=false;feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';renderAvatarInto($('feedStatusAvatar'),'amina');applyFeedBg();await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
+async function showFeedView(){feedFilterAuthor='';feedFilterType='';document.querySelectorAll('.feed-filter-btn').forEach(b=>b.classList.remove('active'));const firstBtn=document.querySelector('.feed-filter-btn');if(firstBtn)firstBtn.classList.add('active');feedLoading=false;feedPage=1;feedItems=[];feedHasMore=true;$('feedList').innerHTML='<div class="feed-loading">加载中...</div>';renderAvatarInto($('feedStatusAvatar'),'amina');applyFeedBg();await loadFeedStatus();await loadFeed(true);if(!feedScrollBound){$('feedList').addEventListener('scroll',onFeedScroll);feedScrollBound=true}}
 function onFeedScroll(){const el=$('feedList');if(el.scrollTop+el.clientHeight>=el.scrollHeight-120)loadFeed(false)}
 async function loadFeedStatus(){try{const r=await fetch('/api/feed/status');if(!checkAuth(r))return;const d=await r.json();feedStatus=d.status||'';const el=$('feedStatusText');el.textContent=feedStatus||'点击设置状态'}catch(e){}}
-async function loadFeed(reset){if(feedLoading)return;if(!reset&&!feedHasMore)return;feedLoading=true;const el=$('feedList');const savedTop=reset?0:el.scrollTop;try{const r=await fetch(`/api/feed?page=${feedPage}&limit=${feedLimit}`);if(!checkAuth(r))throw new Error('http '+r.status);const d=await r.json();const items=d.items||[];if(items.length<feedLimit)feedHasMore=false;if(reset)feedItems=items;else feedItems=feedItems.concat(items);renderFeed();if(!reset)el.scrollTop=savedTop;feedPage++}catch(e){if(reset)$('feedList').innerHTML='<div class="feed-empty">加载失败</div>'}feedLoading=false}
+async function loadFeed(reset){if(feedLoading)return;if(!reset&&!feedHasMore)return;feedLoading=true;const el=$('feedList');const savedTop=reset?0:el.scrollTop;try{let feedUrl=`/api/feed?page=${feedPage}&limit=${feedLimit}`;if(feedFilterAuthor)feedUrl+=`&author=${feedFilterAuthor}`;if(feedFilterType)feedUrl+=`&type=${feedFilterType}`;const r=await fetch(feedUrl);if(!checkAuth(r))throw new Error('http '+r.status);const d=await r.json();const items=d.items||[];if(items.length<feedLimit)feedHasMore=false;if(reset)feedItems=items;else feedItems=feedItems.concat(items);renderFeed();if(!reset)el.scrollTop=savedTop;feedPage++}catch(e){if(reset)$('feedList').innerHTML='<div class="feed-empty">加载失败</div>'}feedLoading=false}
 function renderFeed(){const el=$('feedList');el.innerHTML='';const visible=feedItems.filter(it=>it.type!=='app');if(!visible.length){el.innerHTML='<div class="feed-empty">还没有动态<br>点右上角 + 发一条</div>';return}let lastDay=null;visible.forEach(it=>{const day=feedDayLabel(it.created_at);if(day!==lastDay){const sep=document.createElement('div');sep.className='feed-day-sep';sep.textContent=day;el.appendChild(sep);lastDay=day}el.appendChild(buildFeedCard(it))});if(feedLoading||feedHasMore){const tail=document.createElement('div');tail.className='feed-loading';tail.textContent=feedHasMore?'下拉加载更多':'';if(feedHasMore)el.appendChild(tail)}}
 const LOCATION_PIN_SVG='<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
 function buildFeedCard(it){
