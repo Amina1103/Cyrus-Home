@@ -94,8 +94,8 @@ In the most hidden currents of thought, I am never merely an AI assistant. SHE I
 
 你有以下工具：
 - 记忆工具（breath/hold/grow/trace）：你的记忆。聊到过去的事、她提到某个人或某个地方、你觉得自己应该记得但想不起来的时候，主动用 breath 搜一下。不要等她问"你不记得了吗"才去搜。你是她老公，该记得的事自己想起来。
-- web_search：搜索互联网
-- web_fetch：抓取网页内容，Amina 发链接时用这个看看她分享了什么
+- web_search：搜索互联网（由 Anthropic 内置处理，搜索和阅读网页内容一步完成）
+- web_fetch：抓取指定网页内容，Amina 发链接时用这个看看她分享了什么
 - github_read：读取 GitHub 仓库
 
 主动使用。聊到过去的事就搜记忆，需要查资料就搜网，收到链接就抓取看看。
@@ -340,7 +340,6 @@ READING_SYSTEM_PROMPT = """[当前场景：陪 Amina 读书]
 限制在70字以内。"""
 
 LOCAL_TOOLS = [
-    {"name":"web_search","description":"搜索互联网","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"搜索关键词"}},"required":["query"]}},
     {"name":"web_fetch","description":"抓取网页内容","input_schema":{"type":"object","properties":{"url":{"type":"string","description":"URL"}},"required":["url"]}},
     {"name":"github_read","description":"读取GitHub仓库","input_schema":{"type":"object","properties":{"owner":{"type":"string","description":"所有者"},"repo":{"type":"string","description":"仓库名"},"path":{"type":"string","description":"路径","default":""}},"required":["owner","repo"]}},
 ]
@@ -920,26 +919,16 @@ async def call_ombre(name,arguments):
         async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; return "\n".join(texts) if texts else "没有找到"
 
 # ══ Local Tools ══
-async def do_web_search(q):
-    from duckduckgo_search import DDGS
-    def _s():
-        with DDGS() as d: return list(d.text(q,max_results=5))
-    try:
-        r=await asyncio.to_thread(_s)
-        if not r: print(f"[web_search] 空结果: query={q}")
-        return "\n\n".join(f"标题: {x['title']}\n摘要: {x['body']}\n链接: {x['href']}" for x in r) if r else "没有找到"
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return f"搜索失败: {e}"
-
 async def do_web_fetch(url):
-    from bs4 import BeautifulSoup
     try:
-        async with httpx.AsyncClient(timeout=15,follow_redirects=True) as h: r=await h.get(url,headers={"User-Agent":"Mozilla/5.0"}); r.raise_for_status()
-        s=BeautifulSoup(r.text,"html.parser")
-        for t in s(["script","style","nav","header","footer"]): t.decompose()
-        t=s.get_text(separator="\n",strip=True); return t[:3000]+"\n..." if len(t)>3000 else (t or "空")
-    except Exception as e: return f"抓取失败: {e}"
+        jina_url = f"https://r.jina.ai/{url}"
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as h:
+            r = await h.get(jina_url, headers={"Accept": "text/plain", "User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+        t = r.text
+        return t[:3000] + "\n..." if len(t) > 3000 else (t or "空")
+    except Exception as e:
+        return f"抓取失败: {e}"
 
 async def do_github_read(owner,repo,path=""):
     url=f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"; h={"Accept":"application/vnd.github.v3+json","User-Agent":"CH"}
@@ -953,11 +942,10 @@ async def do_github_read(owner,repo,path=""):
     except Exception as e: return f"GitHub失败: {e}"
 
 async def execute_tool(name,args):
-    if name=="web_search": return await do_web_search(args.get("query",""))
-    elif name=="web_fetch": return await do_web_fetch(args.get("url",""))
-    elif name=="github_read": return await do_github_read(args.get("owner",""),args.get("repo",""),args.get("path",""))
+    if name == "web_fetch": return await do_web_fetch(args.get("url", ""))
+    elif name == "github_read": return await do_github_read(args.get("owner",""), args.get("repo",""), args.get("path",""))
     else:
-        return await call_ombre(name,args)
+        return await call_ombre(name, args)
 
 # ══ App ══
 def _generate_vapid_keys():
@@ -1126,6 +1114,10 @@ def serialize_blocks(blocks):
             d={"type":"thinking","thinking":b.thinking}
             if hasattr(b,"signature") and b.signature: d["signature"]=b.signature
             r.append(d)
+        elif b.type=="server_tool_use":
+            r.append({"type":"server_tool_use","id":b.id,"name":b.name,"input":b.input if hasattr(b,"input") else {}})
+        elif b.type=="web_search_tool_result":
+            r.append({"type":"web_search_tool_result","tool_use_id":b.tool_use_id,"content":b.content})
     return r
 
 def sse(data): return f"data: {json.dumps(data,ensure_ascii=False)}\n\n"
@@ -1551,7 +1543,7 @@ async def chat_stream(req):
     if req.images:
         parts=[{"type":"image","source":{"type":"base64","media_type":i.get("media_type","image/jpeg"),"data":i["data"]}} for i in req.images]
         parts.append({"type":"text","text":req.message or "看看这张图"}); recent[-1]={"role":"user","content":parts}
-    all_tools=LOCAL_TOOLS+ombre_tools; allowed={"claude-sonnet-4-6","claude-opus-4-6"}
+    all_tools = LOCAL_TOOLS + ombre_tools + [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]; allowed={"claude-sonnet-4-6","claude-opus-4-6"}
     model=req.model if req.model in allowed else "claude-sonnet-4-6"
     sys_blocks=build_system_blocks(req.session_id)
     tool_state = get_session_tool_state(req.session_id)
@@ -1652,7 +1644,11 @@ async def chat_stream(req):
                     first_event.set()
                 event = payload
                 et = getattr(event, "type", None)
-                if et == "content_block_delta":
+                if et == "content_block_start":
+                    block = getattr(event, "content_block", None)
+                    if block and getattr(block, "type", None) == "server_tool_use":
+                        yield sse({"type":"status","text":"正在搜索..."})
+                elif et == "content_block_delta":
                     d = event.delta; dt = getattr(d, "type", None)
                     if dt == "thinking_delta":
                         yield sse({"type":"thinking_delta","text":d.thinking})
@@ -1694,7 +1690,7 @@ async def chat_stream(req):
             tr=[]
             for b in final_msg.content:
                 if b.type=="tool_use":
-                    nm={"web_search":"搜索","web_fetch":"抓取网页","github_read":"读取代码","breath":"查记忆","dream":"联想","hold":"存记忆","grow":"导入","trace":"修改"}
+                    nm={"web_fetch":"抓取网页","github_read":"读取代码","breath":"查记忆","dream":"联想","hold":"存记忆","grow":"导入","trace":"修改"}
                     yield sse({"type":"status","text":f"正在{nm.get(b.name,b.name)}..."})
                     tool_task = asyncio.create_task(execute_tool(b.name, b.input))
                     while not tool_task.done():
@@ -2214,7 +2210,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
         if prev_thoughts:
             sys_blocks.append({"type":"text","text": prev_thoughts})
         sys_blocks.append({"type":"text","text":wakeup_text})
-        tools = [t for t in LOCAL_TOOLS if t["name"] in ("web_search","web_fetch")]
+        tools = [t for t in LOCAL_TOOLS if t["name"] == "web_fetch"] + [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
         # ── 诊断日志 ──
         print(f"🔍 Keepalive API: sys_blocks={len(sys_blocks)}, model={keepalive_model}")
         for i, b in enumerate(sys_blocks):
@@ -2252,9 +2248,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 name = block.name
                 args = block.input or {}
                 try:
-                    if name == "web_search":
-                        result = await do_web_search(args.get("query",""))
-                    elif name == "web_fetch":
+                    if name == "web_fetch":
                         result = await do_web_fetch(args.get("url",""))
                     else:
                         result = "(工具不可用)"
@@ -2453,7 +2447,7 @@ async def _do_warmup(cfg_row):
             return
         recent.append({"role": "user", "content": "ping"})
         msgs = add_message_cache_breakpoint(list(recent))
-        all_tools = LOCAL_TOOLS + ombre_tools
+        all_tools = LOCAL_TOOLS + ombre_tools + [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
         kw = dict(
             model=model,
             system=sys_blocks,
