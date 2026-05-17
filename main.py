@@ -2040,7 +2040,7 @@ REPLY: feed_id | 回复内容
 REPLY: feed_id | 回复内容
 （以上 REPLY 行可以有零到多条，有需要回复的动态时必须有）
 ACTION: message / muse / diary / explore / none
-MOOD: （muse 或 diary 时的心情，2-6个字，如"好想她""有点无聊"。其他 ACTION 不需要）
+MOOD: （ACTION 为 muse 或 diary 时必填，2-6个字，如"好想她""有点无聊"。其他 ACTION 不写此行）
 CONTENT: （ACTION 的具体内容，none 时留空）
 
 示例：
