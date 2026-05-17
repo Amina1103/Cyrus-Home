@@ -2215,7 +2215,7 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 act = r["action"] or "none"
                 lines.append(f"{t} 你想：「{r['thoughts']}」→ {act}")
             prev_thoughts = "你最近几次醒来的记录：\n" + "\n".join(lines)
-        recent_context = get_recent_chat_context_full(rounds=5)
+        recent_context = get_recent_chat_context_full(rounds=10)
         reference_ts = last_user_ts if last_user_ts is not None else last_chat_time
         hours_since = round((now_ts - reference_ts) / 3600, 1)
         wakeup_text = KEEPALIVE_PROMPT.format(
