@@ -2492,12 +2492,13 @@ async def _do_reading_warmup():
         conv = reading_conversations.get(active_book, [])
         recent = conv[-20:] if conv else []
         recent_copy = list(recent) + [{"role": "user", "content": "ping"}]
-        resp = client.messages.create(
+        with client.messages.stream(
             model=reading_last_model,
             max_tokens=1,
             system=sys_blocks,
             messages=recent_copy,
-        )
+        ) as stream:
+            resp = stream.get_final_message()
         u = resp.usage
         cr = getattr(u, "cache_read_input_tokens", 0) or 0
         cc = getattr(u, "cache_creation_input_tokens", 0) or 0
