@@ -887,7 +887,7 @@ function buildFeedCard(it){
     html+='<span class="fi-avatar-wrap '+cls+'"><img alt="'+escapeHtml(name)+'" src="'+escapeHtml(avatarUrl(avatarWho))+'" onerror="this.remove()"></span>';
     html+='<div class="fi-meta"><div class="fi-meta-row">';
     html+='<span class="fi-name '+cls+'">'+escapeHtml(name)+'</span>';
-    if(it.status_at_post&&it.type==='moment')html+='<span class="fi-status-tag">'+escapeHtml(it.status_at_post)+'</span>';
+    if(it.status_at_post)html+='<span class="fi-status-tag">'+escapeHtml(it.status_at_post)+'</span>';
     html+='</div>';
     if(it.location)html+='<div class="fi-location">'+LOCATION_PIN_SVG+'<span>'+escapeHtml(it.location)+'</span></div>';
     html+='</div>';
