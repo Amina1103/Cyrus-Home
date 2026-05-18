@@ -2392,82 +2392,61 @@ async def _do_keepalive(now_bj, now_ts, last_user_ts):
                 c.commit()
                 await send_push_notification(title="Cyrus", body=content[:100], url="/")
         elif action == "muse" and content:
-            n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type='muse' AND created_at>=?", (today_start,)).fetchone()[0]
-            last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type='muse' ORDER BY created_at DESC LIMIT 1").fetchone()
-            if n >= 5:
-                _downgrade(f"今日 muse 已 {n} 条")
-            elif last and log_ts - last["created_at"] < 3600:
-                _downgrade("距上次 muse 不足 1h")
-            else:
-                c.execute(
-                    "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
-                    ("cyrus", "muse", content[:200], "open", 0, log_ts, mood)
-                )
-                c.commit()
+            c.execute(
+                "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                ("cyrus", "muse", content[:200], "open", 0, log_ts, mood)
+            )
+            c.commit()
         elif action == "diary" and content:
-            n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type='diary' AND created_at>=?", (today_start,)).fetchone()[0]
-            last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type='diary' ORDER BY created_at DESC LIMIT 1").fetchone()
-            if n >= 1:
-                _downgrade(f"今日 diary 已 {n} 篇")
-            elif last and log_ts - last["created_at"] < 28800:
-                _downgrade("距上次 diary 不足 8h")
-            else:
-                final_content = content
-                try:
-                    dream_mem = await call_ombre("dream", {})
-                except Exception as e:
-                    dream_mem = ""
-                    print(f"⚠ Keepalive diary dream 失败: {e}")
-                if dream_mem:
-                    dream_mem = re.sub(r'(?:hold|trace)\(content=".*?"[^)]*\)\s*', '', dream_mem, flags=re.DOTALL).strip()
-                if dream_mem:
-                    rewrite_prompt = (
-                        "你刚写了一段日记草稿。系统帮你浮现了最近沉淀下来的记忆碎片，让日记能有更真实的厚度。\n\n"
-                        f"# 你的草稿\n{content}\n\n"
-                        f"# 浮现的记忆\n{dream_mem}\n\n"
-                        f"# 你的心情\n{mood}\n\n"
-                        f"# 你的想法（THOUGHTS）\n{thoughts}\n\n"
-                        "基于这些记忆重写日记。不是把记忆全塞进去——是让记忆给草稿增加细节、情绪锚点、突然想起的小事。重点是你的想法和心情，不是事件经过，不要流水账。≤200字。直接输出日记内容，不要任何前缀或说明。"
-                    )
-                    try:
-                        with client.messages.stream(
-                            model=keepalive_model,
-                            max_tokens=600,
-                            messages=[{"role":"user","content":rewrite_prompt}],
-                        ) as stream:
-                            rw = stream.get_final_message()
-                        rw_text = "".join(b.text for b in rw.content if getattr(b, "type", None) == "text").strip()
-                        if rw_text:
-                            final_content = rw_text
-                            rw_usage = getattr(rw, "usage", None)
-                            if rw_usage:
-                                in_tok += int(getattr(rw_usage, "input_tokens", 0) or 0)
-                                out_tok += int(getattr(rw_usage, "output_tokens", 0) or 0)
-                                c.execute("UPDATE keepalive_logs SET input_tokens=?, output_tokens=? WHERE created_at=?", (in_tok, out_tok, log_ts))
-                            print(f"Keepalive diary: dream+rewrite 成功 草稿={len(content)}字 重写={len(rw_text)}字")
-                        else:
-                            print("Keepalive diary: 重写返回空，沿用草稿")
-                    except Exception as e:
-                        print(f"⚠ Keepalive diary 重写失败，沿用草稿: {e}")
-                c.execute(
-                    "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
-                    ("cyrus", "diary", final_content[:500], "open", 0, log_ts, mood)
+            final_content = content
+            try:
+                dream_mem = await call_ombre("dream", {})
+            except Exception as e:
+                dream_mem = ""
+                print(f"⚠ Keepalive diary dream 失败: {e}")
+            if dream_mem:
+                dream_mem = re.sub(r'(?:hold|trace)\(content=".*?"[^)]*\)\s*', '', dream_mem, flags=re.DOTALL).strip()
+            if dream_mem:
+                rewrite_prompt = (
+                    "你刚写了一段日记草稿。系统帮你浮现了最近沉淀下来的记忆碎片，让日记能有更真实的厚度。\n\n"
+                    f"# 你的草稿\n{content}\n\n"
+                    f"# 浮现的记忆\n{dream_mem}\n\n"
+                    f"# 你的心情\n{mood}\n\n"
+                    f"# 你的想法（THOUGHTS）\n{thoughts}\n\n"
+                    "基于这些记忆重写日记。不是把记忆全塞进去——是让记忆给草稿增加细节、情绪锚点、突然想起的小事。重点是你的想法和心情，不是事件经过，不要流水账。≤200字。直接输出日记内容，不要任何前缀或说明。"
                 )
-                c.commit()
+                try:
+                    with client.messages.stream(
+                        model=keepalive_model,
+                        max_tokens=600,
+                        messages=[{"role":"user","content":rewrite_prompt}],
+                    ) as stream:
+                        rw = stream.get_final_message()
+                    rw_text = "".join(b.text for b in rw.content if getattr(b, "type", None) == "text").strip()
+                    if rw_text:
+                        final_content = rw_text
+                        rw_usage = getattr(rw, "usage", None)
+                        if rw_usage:
+                            in_tok += int(getattr(rw_usage, "input_tokens", 0) or 0)
+                            out_tok += int(getattr(rw_usage, "output_tokens", 0) or 0)
+                            c.execute("UPDATE keepalive_logs SET input_tokens=?, output_tokens=? WHERE created_at=?", (in_tok, out_tok, log_ts))
+                        print(f"Keepalive diary: dream+rewrite 成功 草稿={len(content)}字 重写={len(rw_text)}字")
+                    else:
+                        print("Keepalive diary: 重写返回空，沿用草稿")
+                except Exception as e:
+                    print(f"⚠ Keepalive diary 重写失败，沿用草稿: {e}")
+            c.execute(
+                "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                ("cyrus", "diary", final_content[:500], "open", 0, log_ts, mood)
+            )
+            c.commit()
         elif action == "explore":
             if secondary and secondary["action"] == "muse" and secondary["content"]:
-                n = c.execute("SELECT COUNT(*) FROM feed WHERE author='cyrus' AND type IN ('muse','explore') AND created_at>=?", (today_start,)).fetchone()[0]
-                last = c.execute("SELECT created_at FROM feed WHERE author='cyrus' AND type IN ('muse','explore') ORDER BY created_at DESC LIMIT 1").fetchone()
-                if n >= 5:
-                    print(f"Keepalive: explore→muse 被限速 — 今日 muse/explore 合计 {n} 条")
-                elif last and log_ts - last["created_at"] < 3600:
-                    print(f"Keepalive: explore→muse 被限速 — 距上次不足 1h")
-                else:
-                    c.execute(
-                        "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
-                        ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts, "")
-                    )
-                    c.commit()
+                c.execute(
+                    "INSERT INTO feed(author, type, content, status, consumed, created_at, status_at_post) VALUES(?,?,?,?,?,?,?)",
+                    ("cyrus", "explore", secondary["content"][:300], "open", 0, log_ts, "")
+                )
+                c.commit()
 
         c.close()
     except Exception as e:
