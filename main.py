@@ -2087,7 +2087,7 @@ async def unified_heartbeat():
     try:
         now_bj = _beijing_now()
         hour = now_bj.hour
-        if not (hour >= 11 or hour < 3):
+        if not (hour >= 10 or hour < 3):
             print(f"Heartbeat: 不在活跃时段, 当前北京时间 {hour}:00")
             return
         if reading_active:
