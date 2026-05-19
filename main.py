@@ -724,7 +724,7 @@ def init_db():
     try: conn.execute("ALTER TABLE feed ADD COLUMN location TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE sessions ADD COLUMN feed_context TEXT DEFAULT ''")
-    except: pass
+    except sqlite3.OperationalError: pass  # 列已存在
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def compress_image(input_path, output_path):
