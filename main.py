@@ -723,6 +723,8 @@ def init_db():
     except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE feed ADD COLUMN location TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass  # 列已存在
+    try: conn.execute("ALTER TABLE sessions ADD COLUMN feed_context TEXT DEFAULT ''")
+    except: pass
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def compress_image(input_path, output_path):
@@ -1072,6 +1074,7 @@ def get_session_tool_state(sid):
     if not rows:
         return ""
     breath_no_query_done = False
+    breath_queries = []
     dream_done = False
     grow_done = False
     held_items = []
@@ -1081,8 +1084,12 @@ def get_session_tool_state(sid):
             inp = json.loads(r["input_json"]) if r["input_json"] else {}
         except:
             inp = {}
-        if name == "breath" and not inp.get("query", ""):
-            breath_no_query_done = True
+        if name == "breath":
+            q = inp.get("query", "")
+            if not q:
+                breath_no_query_done = True
+            elif q not in breath_queries:
+                breath_queries.append(q)
         elif name == "dream":
             dream_done = True
         elif name == "grow":
@@ -1101,6 +1108,8 @@ def get_session_tool_state(sid):
         parts.append("你在本次对话中已经完成了 dream()。不需要再调 dream()。继续审视梦到的内容——对已经解决的事用 trace(resolved=1) 沉底，对触动你的用 hold(feel=True) 写下你的第一人称感受。")
     if grow_done:
         parts.append("你在本次对话中已经完成了 grow()（批量归档记忆），不需要再调。除非 Amina 明确再次要求。")
+    if breath_queries:
+        parts.append(f"你在本次对话中已经搜过这些关键词：{', '.join(breath_queries)}。相同的关键词不要重复搜，换个词或者直接用已有信息。")
     if held_items:
         items_text = "\n".join(f"  - {item}" for item in held_items)
         parts.append(f"本次对话中你已经 hold 过以下内容，不要重复存相同或相似的内容：\n{items_text}")
@@ -1840,13 +1849,34 @@ async def chat_stream(req):
     except Exception as e:
         print(f"⚠ 保存 last_chat_config 失败: {e}")
     pending_text, pending_ids = get_pending_keepalive_records()
-    pending_feed_text, pending_feed_ids = get_pending_feed_records()
     print(f"🔍 pending_keepalive: has_text={bool(pending_text)}, ids={pending_ids}, len={len(pending_text) if pending_text else 0}")
-    print(f"🔍 pending_feed: has_text={bool(pending_feed_text)}, ids={pending_feed_ids}, len={len(pending_feed_text) if pending_feed_text else 0}")
     if pending_text:
         sys_blocks.append({"type":"text","text":pending_text})
+    # feed 持久化：新 feed 存到 session，之后每次从 session 读
+    pending_feed_text, pending_feed_ids = get_pending_feed_records()
     if pending_feed_text:
-        sys_blocks.append({"type":"text","text":pending_feed_text})
+        try:
+            c_fc = get_db()
+            # 追加到已有的 feed_context（可能上一轮 keepalive 又产生了新动态）
+            existing = c_fc.execute("SELECT feed_context FROM sessions WHERE id=?", (req.session_id,)).fetchone()
+            old_ctx = (existing["feed_context"] or "") if existing else ""
+            new_ctx = (old_ctx + "\n" + pending_feed_text).strip() if old_ctx else pending_feed_text
+            c_fc.execute("UPDATE sessions SET feed_context=? WHERE id=?", (new_ctx, req.session_id))
+            ph = ",".join("?" * len(pending_feed_ids))
+            c_fc.execute(f"UPDATE feed SET consumed=1 WHERE id IN ({ph})", pending_feed_ids)
+            c_fc.commit(); c_fc.close()
+            pending_feed_ids = []  # 清空防止末尾重复标记
+        except Exception as e:
+            print(f"⚠ feed_context 保存失败: {e}")
+    # 从 session 读取 feed_context 注入（无论是新存的还是之前存的）
+    try:
+        c_fc2 = get_db()
+        row = c_fc2.execute("SELECT feed_context FROM sessions WHERE id=?", (req.session_id,)).fetchone()
+        c_fc2.close()
+        if row and row["feed_context"]:
+            sys_blocks.append({"type":"text","text": row["feed_context"]})
+    except Exception as e:
+        print(f"⚠ feed_context 读取失败: {e}")
     kw=dict(model=model,max_tokens=40000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":32000}
@@ -1984,9 +2014,6 @@ async def chat_stream(req):
             if pending_ids:
                 ph=",".join("?"*len(pending_ids))
                 c2.execute(f"UPDATE keepalive_logs SET consumed=1 WHERE id IN ({ph})", pending_ids)
-            if pending_feed_ids:
-                ph=",".join("?"*len(pending_feed_ids))
-                c2.execute(f"UPDATE feed SET consumed=1 WHERE id IN ({ph})", pending_feed_ids)
             c2.execute("UPDATE messages SET keepalive_consumed=1 WHERE session_id=? AND source='keepalive' AND keepalive_consumed=0", (req.session_id,))
             c2.commit(); c2.close()
         except Exception as e: print(f"⚠ 标记 keepalive consumed 失败: {e}")
