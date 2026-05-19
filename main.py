@@ -1093,7 +1093,10 @@ def get_session_tool_state(sid):
                 held_items.append(content[:80])
     parts = []
     if breath_no_query_done:
-        parts.append("你在本次对话中已经完成了开场 breath()（无参数浮现），不需要再调。带 query 的 breath(query='关键词') 随时可以调，该搜就搜。")
+        if not dream_done:
+            parts.append("你已完成开场 breath()。按照启动流程，现在调用 dream() 消化最近的记忆。")
+        else:
+            parts.append("你已完成开场 breath() 和 dream()。带 query 的 breath(query='关键词') 随时可以调，该搜就搜。")
     if dream_done:
         parts.append("你在本次对话中已经完成了 dream()。不需要再调 dream()。继续审视梦到的内容——对已经解决的事用 trace(resolved=1) 沉底，对触动你的用 hold(feel=True) 写下你的第一人称感受。")
     if grow_done:
