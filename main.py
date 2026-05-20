@@ -1198,7 +1198,7 @@ async def call_ombre(name,arguments):
         if not arguments["content"].lstrip().startswith("["):
             arguments = {**arguments, "content": f"{ts} {arguments['content']}"}
     async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
-        async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; return "\n".join(texts) if texts else "没有找到"
+        async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; joined="\n".join(texts).strip(); return joined if joined else "没有找到"
 
 # ══ Local Tools ══
 async def do_web_fetch(url):
