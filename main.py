@@ -1048,9 +1048,6 @@ def build_system_blocks(sid=None):
     if bp2_parts:
         blocks.append({"type":"text","text":"\n\n".join(bp2_parts),"cache_control":{"type":"ephemeral"}})
     blocks.append({"type":"text","text":DIARY_REFERENCE,"cache_control":{"type":"ephemeral"}})
-    ev = get_recent_events(hours=6)
-    if ev:
-        blocks.append({"type":"text","text":f"最近的活动：\n{ev}"})
     return blocks
 
 def build_keepalive_blocks():
@@ -1885,8 +1882,14 @@ async def chat_stream(req):
     try:
         while True:
             fresh_state = get_session_tool_state(req.session_id)
-            kw["messages"] = add_message_cache_breakpoint(list(recent))
+            ev = get_recent_events(hours=6)
+            tail_inject = ""
             if fresh_state:
+                tail_inject += fresh_state
+            if ev:
+                tail_inject += f"\n\n[最近的活动]\n{ev}"
+            kw["messages"] = add_message_cache_breakpoint(list(recent))
+            if tail_inject:
                 msgs = kw["messages"]
                 for i in range(len(msgs) - 1, -1, -1):
                     m = msgs[i]
@@ -1894,13 +1897,13 @@ async def chat_stream(req):
                         continue
                     content = m.get("content")
                     if isinstance(content, str):
-                        msgs[i] = {"role": "user", "content": content + "\n\n" + fresh_state}
+                        msgs[i] = {"role": "user", "content": content + "\n\n" + tail_inject}
                     elif isinstance(content, list):
                         new_content = list(content)
-                        new_content.append({"type": "text", "text": fresh_state})
+                        new_content.append({"type": "text", "text": tail_inject})
                         msgs[i] = {"role": "user", "content": new_content}
                     else:
-                        msgs[i] = {"role": "user", "content": fresh_state}
+                        msgs[i] = {"role": "user", "content": tail_inject}
                     break
             sys_len = sum(len(b.get("text","")) for b in kw.get("system",[]))
             msg_count = len(kw.get("messages",[]))
