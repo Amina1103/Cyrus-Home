@@ -1872,7 +1872,7 @@ async def chat_stream(req):
         row = c_fc2.execute("SELECT feed_context FROM sessions WHERE id=?", (req.session_id,)).fetchone()
         c_fc2.close()
         if row and row["feed_context"]:
-            sys_blocks.append({"type":"text","text": row["feed_context"]})
+            sys_blocks.append({"type":"text","text": row["feed_context"],"cache_control":{"type":"ephemeral"}})
     except Exception as e:
         print(f"⚠ feed_context 读取失败: {e}")
     kw=dict(model=model,max_tokens=40000 if req.thinking else 4096,system=sys_blocks,messages=recent)
