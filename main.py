@@ -1889,10 +1889,10 @@ async def chat_stream(req):
                 tail_inject += fresh_state
             if ev:
                 tail_inject += f"\n\n[最近的活动]\n{ev}"
-            # 防护：确保消息列表以 user 结尾
-            if recent and recent[-1].get("role") != "user":
-                print(f"⚠ 消息列表末尾不是 user，role={recent[-1].get('role')}，自动补 user")
-                recent.append({"role": "user", "content": "（继续）"})
+            # 防护：确保消息列表以 user 结尾（删掉尾部多余的 assistant 消息，而非补假消息）
+            while recent and recent[-1].get("role") != "user":
+                dropped = recent.pop()
+                print(f"⚠ 消息列表末尾不是 user，丢弃 role={dropped.get('role')} len={len(str(dropped.get('content','')))}，回退到上一条")
             kw["messages"] = add_message_cache_breakpoint(list(recent))
             if tail_inject:
                 msgs = kw["messages"]
