@@ -1197,8 +1197,15 @@ async def call_ombre(name,arguments):
         ts = datetime.now(timezone(timedelta(hours=8))).strftime("[%Y-%m-%d %H:%M]")
         if not arguments["content"].lstrip().startswith("["):
             arguments = {**arguments, "content": f"{ts} {arguments['content']}"}
-    async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
-        async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments); texts=[c.text for c in result.content if c.type=="text"]; joined="\n".join(texts).strip(); return joined if joined else "没有找到"
+    try:
+        async with streamablehttp_client(OMBRE_MCP_URL) as (r,w,_):
+            async with ClientSession(r,w) as s: await s.initialize(); result=await s.call_tool(name,arguments)
+        texts=[c.text for c in result.content if c.type=="text"]; joined="\n".join(texts).strip()
+        if name in ("dream","breath","pulse"): print(f"🧠 call_ombre({name}) → {len(joined)} 字符{'（空！）' if not joined else ''}")
+        return joined if joined else "没有找到"
+    except Exception as e:
+        print(f"⚠ call_ombre({name}) 调用异常: {type(e).__name__}: {e}")
+        raise
 
 # ══ Local Tools ══
 async def do_web_fetch(url):
