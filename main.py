@@ -2086,10 +2086,14 @@ async def chat_stream(req):
                         try:
                             c_tc=get_db(); c_tc.execute("INSERT INTO tool_calls(session_id,tool_name,input_json,created_at) VALUES(?,?,?,?)",(req.session_id,b.name,json.dumps(b.input,ensure_ascii=False),time.time())); c_tc.commit(); c_tc.close()
                         except: pass
-                    if b.name in ("breath","dream"):
-                        label = (b.input.get("query") or "").strip() if isinstance(b.input, dict) else ""
-                        if not label: label = "做梦联想" if b.name == "dream" else "开场记忆"
-                        db_append_recalled(req.session_id, label, rt)
+                    # 存 dream 和带关键词的 breath；开场无参数 breath 的内容已常驻
+                    # pinned_memories（系统块每轮都在），不重复存
+                    if b.name == "dream":
+                        db_append_recalled(req.session_id, "做梦联想", rt)
+                    elif b.name == "breath":
+                        q = (b.input.get("query") or "").strip() if isinstance(b.input, dict) else ""
+                        if q:
+                            db_append_recalled(req.session_id, q, rt)
                     tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
             recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
             kw["messages"]=recent
