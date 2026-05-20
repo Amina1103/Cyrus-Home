@@ -2747,9 +2747,14 @@ async def _do_warmup(cfg_row):
         pending_text, _ = get_pending_keepalive_records()
         if pending_text:
             sys_blocks.append({"type": "text", "text": pending_text})
-        pending_feed_text, _ = get_pending_feed_records()
-        if pending_feed_text:
-            sys_blocks.append({"type": "text", "text": pending_feed_text})
+        try:
+            c_fc = get_db()
+            fc_row = c_fc.execute("SELECT feed_context FROM sessions WHERE id=?", (sid,)).fetchone()
+            c_fc.close()
+            if fc_row and fc_row["feed_context"]:
+                sys_blocks.append({"type": "text", "text": fc_row["feed_context"]})
+        except Exception as e:
+            print(f"⚠ warmup feed_context 读取失败: {e}")
         recent = db_get_messages_since_summary(sid, max_messages=200)
         if not recent:
             print("Heartbeat → Warmup: no messages, skip")
