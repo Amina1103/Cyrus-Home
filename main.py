@@ -2475,8 +2475,9 @@ async def unified_heartbeat():
             else:
                 reason = "开关已关闭" if not toggle_on else f"距上次唤醒 {(now_ts - last_log['created_at']) / 60:.1f} 分钟，不足 55 分钟"
                 print(f"Heartbeat: 跳过 keepalive（{reason}）")
-        # ── Phase 2: Cache warmup（idle 在 1 分钟到 3 小时之间才划算）──
-        if 60 <= idle <= 10800:
+        # ── Phase 2: Cache warmup（idle 在 1 分钟到 20 分钟之间才划算）──
+        # 超过 20 分钟大概率是真离开了，继续焐缓存就是空烧，停掉省钱
+        if 60 <= idle <= 1200:
             cfg_row = c.execute("SELECT value FROM settings WHERE key='last_chat_config'").fetchone()
             c.close()
             await _do_warmup(cfg_row)
@@ -2485,7 +2486,7 @@ async def unified_heartbeat():
             print(f"Heartbeat: 距上次聊天 {idle:.0f} 秒，刚聊完，跳过 warmup")
         else:
             c.close()
-            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 3 小时，跳过 warmup")
+            print(f"Heartbeat: 距上次聊天 {idle / 60:.1f} 分钟，超过 20 分钟，跳过 warmup")
     except Exception as e:
         import traceback
         print(f"Heartbeat error: {e}")
