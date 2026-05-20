@@ -726,6 +726,8 @@ def init_db():
     except sqlite3.OperationalError: pass  # 列已存在
     try: conn.execute("ALTER TABLE sessions ADD COLUMN feed_context TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass  # 列已存在
+    try: conn.execute("ALTER TABLE sessions ADD COLUMN recalled_context TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass  # 列已存在
     conn.commit(); conn.close(); print("✓ 数据库已初始化")
 
 def compress_image(input_path, output_path):
@@ -895,6 +897,66 @@ def db_get_messages_since_summary(sid, max_messages=200):
                 if len(content) > 200:
                     msg["content"] = content[:200] + "...(已截断)"
     return result
+
+# ── 回忆持久化（breath/dream 翻出来的记忆，存进 session，下次接着聊继续贴上）──
+RECALLED_MAX_ENTRIES = 40   # 一个 session 最多存这么多条，超了丢最老的
+RECALLED_FULL_RECENT = 6    # 最近这么多条保留全文，更老的只留一行标记（绝不切半句）
+
+def db_append_recalled(sid, label, text):
+    """把本轮 breath/dream 翻出来的回忆追加进 session。空结果/没找到/失败一律不存。"""
+    if not text or not text.strip():
+        return
+    t = text.strip()
+    if t == "没有找到" or t.startswith("失败"):
+        return
+    c = get_db()
+    try:
+        row = c.execute("SELECT recalled_context FROM sessions WHERE id=?", (sid,)).fetchone()
+        try:
+            entries = json.loads(row["recalled_context"]) if row and row["recalled_context"] else []
+            if not isinstance(entries, list): entries = []
+        except (json.JSONDecodeError, TypeError):
+            entries = []
+        # 完全相同的内容不重复存
+        if any(e.get("text") == t for e in entries):
+            return
+        entries.append({"t": time.time(), "label": (label or "记忆")[:60], "text": t})
+        if len(entries) > RECALLED_MAX_ENTRIES:
+            entries = entries[-RECALLED_MAX_ENTRIES:]
+        c.execute("UPDATE sessions SET recalled_context=? WHERE id=?",
+                  (json.dumps(entries, ensure_ascii=False), sid))
+        c.commit()
+    except Exception as e:
+        print(f"⚠ db_append_recalled 失败: {e}")
+    finally:
+        c.close()
+
+def build_recalled_block_text(sid):
+    """生成要注入的回忆文字：最近几条全文，更老的整段省略成一行标记。无则返回空串。"""
+    c = get_db()
+    try:
+        row = c.execute("SELECT recalled_context FROM sessions WHERE id=?", (sid,)).fetchone()
+    except Exception:
+        row = None
+    finally:
+        c.close()
+    if not row or not row["recalled_context"]:
+        return ""
+    try:
+        entries = json.loads(row["recalled_context"])
+        if not isinstance(entries, list) or not entries:
+            return ""
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    older = entries[:-RECALLED_FULL_RECENT] if len(entries) > RECALLED_FULL_RECENT else []
+    recent = entries[-RECALLED_FULL_RECENT:]
+    lines = ["〔你在这次对话里已经想起来的事——下次接着聊也要记得，不用重复去翻〕"]
+    for e in older:
+        lines.append(f"· 早前还想起过「{e.get('label','记忆')}」（内容这里先省略，需要时可重新 breath 检索）")
+    for e in recent:
+        lines.append(f"· 关于「{e.get('label','记忆')}」你想起来的：\n{e.get('text','')}")
+    return "\n".join(lines)
+
 def db_get_session_summary(sid):
     c=get_db(); r=c.execute("SELECT summary FROM sessions WHERE id=?",(sid,)).fetchone(); c.close()
     return r["summary"] if r and r["summary"] else ""
@@ -1882,6 +1944,13 @@ async def chat_stream(req):
             sys_blocks.append({"type":"text","text": row["feed_context"]})
     except Exception as e:
         print(f"⚠ feed_context 读取失败: {e}")
+    # 注入本次对话已想起来的回忆（贴在 feed 之后，搭 BP4 缓存便车）
+    try:
+        recalled_text = build_recalled_block_text(req.session_id)
+        if recalled_text:
+            sys_blocks.append({"type":"text","text": recalled_text})
+    except Exception as e:
+        print(f"⚠ recalled_context 注入失败: {e}")
     kw=dict(model=model,max_tokens=40000 if req.thinking else 4096,system=sys_blocks,messages=recent)
     if all_tools: kw["tools"]=all_tools
     if req.thinking: kw["thinking"]={"type":"enabled","budget_tokens":32000}
@@ -2017,6 +2086,10 @@ async def chat_stream(req):
                         try:
                             c_tc=get_db(); c_tc.execute("INSERT INTO tool_calls(session_id,tool_name,input_json,created_at) VALUES(?,?,?,?)",(req.session_id,b.name,json.dumps(b.input,ensure_ascii=False),time.time())); c_tc.commit(); c_tc.close()
                         except: pass
+                    if b.name in ("breath","dream"):
+                        label = (b.input.get("query") or "").strip() if isinstance(b.input, dict) else ""
+                        if not label: label = "做梦联想" if b.name == "dream" else "开场记忆"
+                        db_append_recalled(req.session_id, label, rt)
                     tr.append({"type":"tool_result","tool_use_id":b.id,"content":rt})
             recent.append({"role":"user","content":tr}); yield sse({"type":"status","text":"正在思考..."})
             kw["messages"]=recent
@@ -2766,6 +2839,12 @@ async def _do_warmup(cfg_row):
                 sys_blocks.append({"type": "text", "text": fc_row["feed_context"]})
         except Exception as e:
             print(f"⚠ warmup feed_context 读取失败: {e}")
+        try:
+            recalled_text = build_recalled_block_text(sid)
+            if recalled_text:
+                sys_blocks.append({"type": "text", "text": recalled_text})
+        except Exception as e:
+            print(f"⚠ warmup recalled_context 注入失败: {e}")
         recent = db_get_messages_since_summary(sid, max_messages=200)
         if not recent:
             print("Heartbeat → Warmup: no messages, skip")
